@@ -1,0 +1,73 @@
+# Proxmox API Connection
+proxmox_endpoint  = "https://10.10.10.2:8006/"
+proxmox_api_token = "root@pam!terraform=00000000-0000-0000-0000-000000000000"
+proxmox_insecure  = true
+
+# Physical Hosts
+pve_host_1 = "pve-01"
+pve_host_2 = "pve-02"
+
+# Storage Pools
+storage_datastore = "local-lvm"
+snippet_datastore = "local"
+
+# Networking
+network_bridge  = "vmbr0"
+network_gateway = "10.10.10.1"
+dns_servers     = ["10.10.10.1", "1.1.1.1"]
+
+# SSH Key for authentication
+ssh_public_keys = [
+  "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGitlabRunnerKeyHereSamplePublicVaultAccess root@gitlab"
+]
+
+ci_user = "debian"
+
+# Resource Sizing
+vault_vm_config = {
+  cores     = 2
+  memory    = 4096
+  disk_size = 32
+}
+
+vault_lxc_config = {
+  cores     = 1
+  memory    = 1024
+  disk_size = 8
+}
+
+# Image Sources
+vm_cloud_image_url = "https://cloud.debian.org/images/cloud/bookworm/latest/debian-12-genericcloud-amd64.raw"
+lxc_template_path  = "local:vztmpl/debian-12-standard_12.7-1_amd64.tar.zst"
+
+# Node IP and Host Allocation
+nodes = {
+  "vault-01" = {
+    vmid        = 501
+    ip_cidr     = "10.10.10.11/24"
+    target_node = "pve-01"
+    type        = "vm"
+    description = "Main Vault Cluster Node 01 (Raft)"
+  }
+  "vault-02" = {
+    vmid        = 502
+    ip_cidr     = "10.10.10.12/24"
+    target_node = "pve-01"
+    type        = "vm"
+    description = "Main Vault Cluster Node 02 (Raft)"
+  }
+  "vault-03" = {
+    vmid        = 503
+    ip_cidr     = "10.10.10.13/24"
+    target_node = "pve-02"
+    type        = "vm"
+    description = "Main Vault Cluster Node 03 (Raft)"
+  }
+  "vault-transit" = {
+    vmid        = 500
+    ip_cidr     = "10.10.10.10/24"
+    target_node = "pve-02"
+    type        = "lxc"
+    description = "Isolated Transit Vault LXC (Auto-Unseal Engine)"
+  }
+}
