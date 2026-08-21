@@ -10,14 +10,14 @@ This repository contains the complete Infrastructure-as-Code (Terraform / OpenTo
 flowchart TB
     subgraph Host1["Standalone Proxmox Host 1 (colossus)"]
         direction TB
-        V1["vault-01 (VM)<br/>IP: 10.10.10.11<br/>Raft Node 1"]
-        V2["vault-02 (VM)<br/>IP: 10.10.10.12<br/>Raft Node 2"]
+        V1["vm-vault-01 (VM)<br/>IP: 192.169.0.201<br/>Raft Node 1"]
+        V2["vm-vault-02 (VM)<br/>IP: 192.169.0.202<br/>Raft Node 2"]
     end
 
     subgraph Host2["Standalone Proxmox Host 2 (guardian)"]
         direction TB
-        V3["vault-03 (VM)<br/>IP: 10.10.10.13<br/>Raft Node 3"]
-        VT["vault-transit (LXC)<br/>IP: 10.10.10.10<br/>Transit Auto-Unseal Oracle"]
+        V3["vm-vault-03 (VM)<br/>IP: 192.169.0.203<br/>Raft Node 3"]
+        VT["vm-vault-transit (LXC)<br/>IP: 192.169.0.200<br/>Transit Auto-Unseal Oracle"]
     end
 
     subgraph Management["GitLab Server (gitbox.jnet.lan)"]
@@ -46,18 +46,18 @@ flowchart TB
 
 In a 3-node Raft consensus cluster, quorum requires a strict majority of **2 nodes** ($Q = \lfloor 3/2 \rfloor + 1 = 2$). Across your 2 standalone physical hosts:
 
-* **Host 1 (`colossus`)**: `vault-01` (VM), `vault-02` (VM) — Holds 2 Raft voting members.
-* **Host 2 (`guardian`)**: `vault-03` (VM), `vault-transit` (LXC) — Holds 1 Raft voting member + Transit Auto-Unseal oracle.
+* **Host 1 (`colossus`)**: `vm-vault-01` (`192.169.0.201`), `vm-vault-02` (`192.169.0.202`) — Holds 2 Raft voting members.
+* **Host 2 (`guardian`)**: `vm-vault-03` (`192.169.0.203`), `vm-vault-transit` (`192.169.0.200`) — Holds 1 Raft voting member + Transit Auto-Unseal oracle.
 * **Hypervisor Independence**: Because `colossus` and `guardian` are non-clustered standalone hosts, they have complete failure isolation with zero inter-hypervisor dependencies.
 
 ### Failure Scenarios & Mitigations
 
 | Failure Scenario | Active Raft Nodes | Quorum State | Cluster Impact | Operational Action |
 |---|---|---|---|---|
-| **Host 2 (`guardian`) Fails** | 2 / 3 (`vault-01`, `vault-02`) | **QUORUM MAINTAINED** | **Zero downtime.** Cluster continues read/write operations seamlessly. Transit is only required when instances reboot/restart. | Restore `guardian` or restart `vault-transit` LXC when convenient. |
-| **Host 1 (`colossus`) Fails** | 1 / 3 (`vault-03`) | **QUORUM LOST** | **Cluster halts writes** to protect against split-brain corruption. | If `colossus` is recoverable, power it back on. If permanently destroyed, run [`scripts/raft_recovery.sh`](file:///home/ajensen/Repos/vault-bootstrap/scripts/raft_recovery.sh) on `vault-03` to promote it to single-node quorum. |
+| **Host 2 (`guardian`) Fails** | 2 / 3 (`vm-vault-01`, `vm-vault-02`) | **QUORUM MAINTAINED** | **Zero downtime.** Cluster continues read/write operations seamlessly. Transit is only required when instances reboot/restart. | Restore `guardian` or restart `vm-vault-transit` LXC when convenient. |
+| **Host 1 (`colossus`) Fails** | 1 / 3 (`vm-vault-03`) | **QUORUM LOST** | **Cluster halts writes** to protect against split-brain corruption. | If `colossus` is recoverable, power it back on. If permanently destroyed, run [`scripts/raft_recovery.sh`](file:///home/ajensen/Repos/vault-bootstrap/scripts/raft_recovery.sh) on `vm-vault-03` to promote it to single-node quorum. |
 | **Network Partition (colossus vs guardian)** | `colossus` (2 nodes) vs `guardian` (1 node) | `colossus` retains quorum (2/3) | `colossus` continues serving client traffic; `guardian` isolates itself. | Network partition auto-heals when link recovers; Raft log syncs automatically. |
-| **Transit LXC Fails** | 3 / 3 | **QUORUM MAINTAINED** | **Zero downtime.** Existing unsealed memory state is unaffected. | Restart `vault-transit` LXC. |
+| **Transit LXC Fails** | 3 / 3 | **QUORUM MAINTAINED** | **Zero downtime.** Existing unsealed memory state is unaffected. | Restart `vm-vault-transit` LXC. |
 
 ---
 
@@ -81,7 +81,7 @@ vault-bootstrap/
 ├── ansible/                        # Configuration Management & Orchestration
 │   ├── ansible.cfg                 # Performance, SSH, and role settings
 │   ├── inventory/
-│   │   └── hosts.yaml              # Node inventory mapping
+│   │   └── hosts.yaml              # Node inventory mapping (192.169.0.200 - 203)
 │   ├── group_vars/
 │   │   ├── all.yaml                # Global PKI & Vault versions
 │   │   ├── vault_cluster.yaml      # Raft cluster variables & recovery keys
@@ -130,4 +130,11 @@ terraform apply
 
 cd ../ansible
 ansible-playbook -i inventory/hosts.yaml playbooks/site.yaml
+```
+
+### 3. CLI Helper
+```bash
+source scripts/vault_env.sh 192.169.0.201
+vault status
+vault operator raft list-peers
 ```

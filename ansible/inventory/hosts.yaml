@@ -5,22 +5,22 @@ all:
   children:
     vault_cluster:
       hosts:
-        vault-01:
-          ansible_host: 10.10.10.11
+        vm-vault-01:
+          ansible_host: 192.169.0.201
           vault_node_id: 501
           pve_host: colossus
-        vault-02:
-          ansible_host: 10.10.10.12
+        vm-vault-02:
+          ansible_host: 192.169.0.202
           vault_node_id: 502
           pve_host: colossus
-        vault-03:
-          ansible_host: 10.10.10.13
+        vm-vault-03:
+          ansible_host: 192.169.0.203
           vault_node_id: 503
           pve_host: guardian
     vault_transit:
       hosts:
-        vault-transit:
-          ansible_host: 10.10.10.10
+        vm-vault-transit:
+          ansible_host: 192.169.0.200
           vault_node_id: 500
           pve_host: guardian
           ansible_user: root

@@ -8,10 +8,10 @@ vault_recovery_shares: 5
 vault_recovery_threshold: 3
 
 # Primary bootstrap node
-vault_primary_node: "vault-01"
+vault_primary_node: "vm-vault-01"
 
 # Transit Vault Auto-Unseal configuration
-vault_transit_host: "{{ hostvars['vault-transit']['ansible_host'] }}"
+vault_transit_host: "{{ hostvars['vm-vault-transit']['ansible_host'] }}"
 vault_transit_port: 8200
 vault_transit_key_name: "vault-unseal-key"
 vault_transit_mount: "transit"

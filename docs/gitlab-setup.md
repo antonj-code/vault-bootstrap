@@ -62,6 +62,6 @@ Navigate to **Settings** $\rightarrow$ **CI/CD** $\rightarrow$ **Variables** $\r
 When code is committed or merged to `main`:
 1. **`validate`**: Runs `terraform fmt` and `ansible-lint`.
 2. **`plan`**: Creates a deterministic execution plan against GitLab HTTP backend.
-3. **`apply`**: Deploys `vault-01` and `vault-02` on `colossus`, and `vault-03` + `vault-transit` on `guardian`.
+3. **`apply`**: Deploys `vm-vault-01` (192.169.0.201) and `vm-vault-02` (192.169.0.202) on `colossus`, and `vm-vault-03` (192.169.0.203) + `vm-vault-transit` (192.169.0.200) on `guardian`.
 4. **`configure`**: Executes Ansible roles (`vault_common`, `vault_pki`, `vault_transit`, `vault_cluster`).
 5. **`verify`**: Runs automated `/v1/sys/health` probes across all 4 instances.

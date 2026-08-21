@@ -16,17 +16,17 @@ if [[ "${confirm}" != "y" && "${confirm}" != "Y" ]]; then
   exit 1
 fi
 
-NODE_IP="10.10.10.13"
+NODE_IP="192.169.0.203"
 
-echo "[1/4] Stopping Vault service on vault-03..."
+echo "[1/4] Stopping Vault service on vm-vault-03..."
 ssh -o StrictHostKeyChecking=no debian@"${NODE_IP}" "sudo systemctl stop vault"
 
-echo "[2/4] Injecting peers.json recovery definition on vault-03..."
+echo "[2/4] Injecting peers.json recovery definition on vm-vault-03..."
 ssh -o StrictHostKeyChecking=no debian@"${NODE_IP}" "sudo bash -c 'cat << \"EOF\" > /opt/vault/data/raft/peers.json
 [
   {
-    \"id\": \"vault-03\",
-    \"address\": \"10.10.10.13:8201\",
+    \"id\": \"vm-vault-03\",
+    \"address\": \"192.169.0.203:8201\",
     \"non_voter\": false
   }
 ]
@@ -34,7 +34,7 @@ EOF
 chown -R vault:vault /opt/vault/data/raft/peers.json
 '"
 
-echo "[3/4] Restarting Vault service on vault-03..."
+echo "[3/4] Restarting Vault service on vm-vault-03..."
 ssh -o StrictHostKeyChecking=no debian@"${NODE_IP}" "sudo systemctl start vault"
 
 echo "[4/4] Verifying recovery status..."

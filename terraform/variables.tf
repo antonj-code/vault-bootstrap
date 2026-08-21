@@ -62,7 +62,7 @@ variable "network_bridge" {
 variable "network_gateway" {
   description = "Default IPv4 Gateway for VMs and Containers"
   type        = string
-  default     = "10.10.10.1"
+  default     = "192.169.0.1"
 }
 
 variable "dns_servers" {
@@ -124,57 +124,57 @@ variable "lxc_template_path" {
   default     = "local:vztmpl/debian-12-standard_12.7-1_amd64.tar.zst"
 }
 
-# --- Host 1 Node Allocations ---
+# --- Host 1 Node Allocations (colossus) ---
 variable "host1_vms" {
-  description = "VMs to deploy on standalone Host 1"
+  description = "VMs to deploy on standalone Host 1 (colossus)"
   type = map(object({
     vmid        = number
     ip_cidr     = string
     description = string
   }))
   default = {
-    "vault-01" = {
+    "vm-vault-01" = {
       vmid        = 501
-      ip_cidr     = "10.10.10.11/24"
-      description = "Main Vault Cluster Node 01 (Raft - Host 1)"
+      ip_cidr     = "192.169.0.201/24"
+      description = "Main Vault Cluster Node 01 (Raft - colossus)"
     }
-    "vault-02" = {
+    "vm-vault-02" = {
       vmid        = 502
-      ip_cidr     = "10.10.10.12/24"
-      description = "Main Vault Cluster Node 02 (Raft - Host 1)"
+      ip_cidr     = "192.169.0.202/24"
+      description = "Main Vault Cluster Node 02 (Raft - colossus)"
     }
   }
 }
 
-# --- Host 2 Node Allocations ---
+# --- Host 2 Node Allocations (guardian) ---
 variable "host2_vms" {
-  description = "VMs to deploy on standalone Host 2"
+  description = "VMs to deploy on standalone Host 2 (guardian)"
   type = map(object({
     vmid        = number
     ip_cidr     = string
     description = string
   }))
   default = {
-    "vault-03" = {
+    "vm-vault-03" = {
       vmid        = 503
-      ip_cidr     = "10.10.10.13/24"
-      description = "Main Vault Cluster Node 03 (Raft - Host 2)"
+      ip_cidr     = "192.169.0.203/24"
+      description = "Main Vault Cluster Node 03 (Raft - guardian)"
     }
   }
 }
 
 variable "host2_lxcs" {
-  description = "LXCs to deploy on standalone Host 2"
+  description = "LXCs to deploy on standalone Host 2 (guardian)"
   type = map(object({
     vmid        = number
     ip_cidr     = string
     description = string
   }))
   default = {
-    "vault-transit" = {
+    "vm-vault-transit" = {
       vmid        = 500
-      ip_cidr     = "10.10.10.10/24"
-      description = "Isolated Transit Vault LXC (Auto-Unseal Engine - Host 2)"
+      ip_cidr     = "192.169.0.200/24"
+      description = "Isolated Transit Vault LXC (Auto-Unseal Engine - guardian)"
     }
   }
 }
