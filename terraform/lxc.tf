@@ -1,9 +1,13 @@
-# Provision the Transit Vault LXC Container for Auto-Unseal
+# ==============================================================================
+# PROXMOX HOST 2 (Standalone pve-02): vault-transit LXC
+# ==============================================================================
+
 resource "proxmox_virtual_environment_container" "vault_transit" {
-  for_each  = local.lxc_nodes
-  node_name = each.value.target_node
+  provider  = proxmox.pve2
+  for_each  = var.host2_lxcs
+  node_name = var.pve_host_2_node_name
   vm_id     = each.value.vmid
-  tags      = ["vault", "transit", "auto-unseal"]
+  tags      = ["vault", "transit", "auto-unseal", "host2"]
 
   description = each.value.description
 

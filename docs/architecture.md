@@ -1,6 +1,6 @@
 # Vault High Availability Architecture & Proxmox Distribution Guide
 
-This document outlines the architecture, distribution logic, quorum behavior, network topology, and security hardening for a high-availability **3-Node HashiCorp Vault Cluster** with an isolated **Transit Auto-Unseal Vault LXC** running on **2x Proxmox VE physical hosts**.
+This document outlines the architecture, distribution logic, quorum behavior, network topology, and security hardening for a high-availability **3-Node HashiCorp Vault Cluster** with an isolated **Transit Auto-Unseal Vault LXC** running across **2x Standalone (Non-Clustered) Proxmox VE physical hosts**.
 
 ---
 
@@ -8,20 +8,20 @@ This document outlines the architecture, distribution logic, quorum behavior, ne
 
 ```mermaid
 flowchart TB
-    subgraph Physical_Host_1["Proxmox VE Host 1 (pve-01)"]
+    subgraph Physical_Host_1["Standalone Proxmox Host 1 (pve-01)"]
         direction TB
         V1["vault-01 (VM)<br/>Role: Raft Node 1<br/>Port: 8200 / 8201"]
         V2["vault-02 (VM)<br/>Role: Raft Node 2<br/>Port: 8200 / 8201"]
     end
 
-    subgraph Physical_Host_2["Proxmox VE Host 2 (pve-02)"]
+    subgraph Physical_Host_2["Standalone Proxmox Host 2 (pve-02)"]
         direction TB
         V3["vault-03 (VM)<br/>Role: Raft Node 3<br/>Port: 8200 / 8201"]
         VT["vault-transit (LXC)<br/>Role: Auto-Unseal Engine<br/>Port: 8200"]
     end
 
-    subgraph Management_Host["GitLab Environment"]
-        GL["GitLab VM / CI Runner<br/>+ Proxmox QDevice Witness"]
+    subgraph Management_Host["GitLab Server (gitbox.jnet.lan)"]
+        GL["GitLab VM & Runner<br/>(GitOps Controller & Terraform State)"]
     end
 
     %% Raft Consensus
@@ -35,8 +35,8 @@ flowchart TB
     V3 -.->|"Auto-Unseal Decrypt (TLS 8200)"| VT
 
     %% Pipeline deployment
-    GL -->|"Terraform / OpenTofu API"| Physical_Host_1
-    GL -->|"Terraform / OpenTofu API"| Physical_Host_2
+    GL -->|"Proxmox API (pve1)"| Physical_Host_1
+    GL -->|"Proxmox API (pve2)"| Physical_Host_2
     GL -->|"Ansible SSH / TLS"| V1
     GL -->|"Ansible SSH / TLS"| V2
     GL -->|"Ansible SSH / TLS"| V3
@@ -45,18 +45,23 @@ flowchart TB
 
 ---
 
-## 2. Hardware Distribution & Quorum Analysis
+## 2. Standalone Hypervisors & Vault Quorum Analysis
 
-### 2.1 The 2-Host Physical Quorum Challenge
+### 2.1 Hypervisor Fault Isolation
 
-In distributed consensus algorithms (HashiCorp Raft), quorum is defined as:
+Because `pve-01` and `pve-02` are **independent standalone hypervisors**:
+* They do not share a cluster filesystem (`pmxcfs`) or Corosync ring.
+* Hypervisor-level split-brain is completely eliminated: an issue on `pve-01` will never cause `pve-02` to enter a read-only lock or fencing state.
+* Terraform targets each host independently via provider aliases (`proxmox.pve1` and `proxmox.pve2`).
+
+### 2.2 Application-Level Raft Quorum
+
+In HashiCorp Vault's Raft consensus algorithm:
 $$Q = \left\lfloor \frac{N}{2} \right\rfloor + 1$$
 For a 3-node cluster ($N=3$), minimum quorum requires **2 active nodes**.
 
-When deploying across only **2 physical Proxmox hosts**, a 3-node cluster cannot be divided symmetrically. The instance layout is:
-* **Host 1 (`pve-01`)**: `vault-01` (VM), `vault-02` (VM)
-* **Host 2 (`pve-02`)**: `vault-03` (VM), `vault-transit` (LXC)
-* **Witness / Tie-Breaker**: Proxmox Corosync QDevice configured on the GitLab VM to ensure the Proxmox cluster itself avoids split-brain.
+* **Host 1 (`pve-01`)**: `vault-01` (VM), `vault-02` (VM) — Holds 2 voting members.
+* **Host 2 (`pve-02`)**: `vault-03` (VM), `vault-transit` (LXC) — Holds 1 voting member + Transit Auto-Unseal oracle.
 
 ```mermaid
 graph TD
@@ -74,19 +79,14 @@ graph TD
     n3 --- n1
 ```
 
-### 2.2 Failure Domain & Recovery Matrix
+### 2.3 Failure Domain & Recovery Matrix
 
 | Failure Event | Available Raft Nodes | Raft Quorum Status | Transit Status | Cluster Impact & Recovery Action |
 |---|---|---|---|---|
-| **Host 2 (`pve-02`) Dies** | 2 / 3 (`vault-01`, `vault-02`) | **MAINTAINED** (2 $\ge$ 2) | Offline | **No impact on active cluster operations.** Cluster remains fully read/write. Transit is only called during node restart/unseal. If a node restarts while Host 2 is down, it waits for Transit restoration or manual unseal. |
-| **Host 1 (`pve-01`) Dies** | 1 / 3 (`vault-03`) | **LOST** (1 < 2) | Online | **Cluster enters read-only/sealed safety state.** Prevents split-brain data corruption. If Host 1 is permanently lost, operator initiates Raft recovery (`peers.json`) on `vault-03`. If Proxmox HA replication is enabled, `vault-01`/`vault-02` automatically restart on Host 2. |
+| **Host 2 (`pve-02`) Dies** | 2 / 3 (`vault-01`, `vault-02`) | **MAINTAINED** (2 $\ge$ 2) | Offline | **Zero disruption on active cluster operations.** Cluster remains fully read/write on Host 1. Transit is only queried during node restarts. |
+| **Host 1 (`pve-01`) Dies** | 1 / 3 (`vault-03`) | **LOST** (1 < 2) | Online | **Cluster enters safe read-only/halt state** to prevent split-brain. If Host 1 is unrecoverable, run [`scripts/raft_recovery.sh`](file:///home/ajensen/Repos/vault-bootstrap/scripts/raft_recovery.sh) on `vault-03` to force single-node quorum. |
 | **Inter-Host Network Split** | Host 1 (2 nodes) vs Host 2 (1 node) | Host 1 retains quorum (2/3); Host 2 is isolated (1/3) | Host 1 cannot reach Transit; Host 2 has Transit | Host 1 continues serving clients. Host 2 steps down. Split-brain is prevented because Raft leader election strictly requires $\ge 2$ votes. |
-| **Transit LXC Fails** | 3 / 3 | **MAINTAINED** | Offline | **Zero runtime read/write disruption.** In-flight encryption/decryption and secret reads in the main cluster are completely independent of Transit. Only node restarts require Transit. |
-
-### 2.3 Why Transit is Placed on Host 2
-1. **Failure Decoupling**: Host 1 contains the Raft majority (2 nodes). Placing the Transit LXC on Host 2 avoids single-point-of-failure concentration on Host 1.
-2. **Resource Efficiency**: An LXC container consumes negligible memory (~256MB–512MB RAM) and minimal CPU overhead, making it ideal for Host 2 alongside `vault-03`.
-3. **Independent Lifecycle**: Transit Vault does not participate in the Main Vault's Raft consensus ring. It operates as an independent, single-node cryptographic oracle.
+| **Transit LXC Fails** | 3 / 3 | **MAINTAINED** | Offline | **Zero runtime read/write disruption.** Existing in-memory barrier keys are unaffected. Restart `vault-transit` LXC when convenient. |
 
 ---
 
@@ -110,42 +110,13 @@ sequenceDiagram
     V->>V: State: ACTIVE or STANDBY (Unsealed)
 ```
 
-### 3.1 Transit Security Policy
-The Main Cluster authenticates to Transit Vault using a scoped Token or AppRole with minimal privileges:
-```hcl
-path "transit/encrypt/vault-unseal-key" {
-  capabilities = ["update"]
-}
-
-path "transit/decrypt/vault-unseal-key" {
-  capabilities = ["update"]
-}
-```
-
 ---
 
 ## 4. Network and Port Allocation
 
-| Component | Hostname | IP Address (Example) | Listening Ports | Purpose |
+| Component | Hostname | IP Address | Listening Ports | Target Physical Host |
 |---|---|---|---|---|
-| **Vault Node 1** | `vault-01` | `10.10.10.11` | `8200/tcp` (API), `8201/tcp` (Cluster) | Main Vault Active/Standby Node |
-| **Vault Node 2** | `vault-02` | `10.10.10.12` | `8200/tcp` (API), `8201/tcp` (Cluster) | Main Vault Active/Standby Node |
-| **Vault Node 3** | `vault-03` | `10.10.10.13` | `8200/tcp` (API), `8201/tcp` (Cluster) | Main Vault Active/Standby Node |
-| **Transit Vault** | `vault-transit` | `10.10.10.10` | `8200/tcp` (API) | Dedicated Auto-Unseal Oracle |
-| **Proxmox Host 1** | `pve-01` | `10.10.10.2` | `8006/tcp` (PVE API), `22/tcp` | Hypervisor Node 1 |
-| **Proxmox Host 2** | `pve-02` | `10.10.10.3` | `8006/tcp` (PVE API), `22/tcp` | Hypervisor Node 2 |
-
----
-
-## 5. Security Hardening Specifications
-
-1. **Memory Locking (`mlock` / `cap_ipc_lock`)**: Prevent sensitive cryptographic material from paging to swap disk.
-2. **Mutual TLS / Dedicated CA**:
-   - Cluster internal communication on port 8201 requires mutual TLS.
-   - API endpoints on port 8200 are TLS 1.3 enforced.
-   - Subject Alternative Names (SANs) include DNS names, loopback, and individual node IPs.
-3. **Dedicated System User & Sandboxing**:
-   - Vault runs under unprivileged `vault:vault` (UID/GID 999).
-   - Systemd unit restricts `/home`, `/root`, and mount namespaces (`ProtectSystem=full`, `PrivateTmp=yes`, `NoNewPrivileges=yes`).
-4. **Separation of Concerns**:
-   - Transit Vault root token is strictly used once to mint the scoped unseal token, then stored offline or revoked.
+| **Vault Node 1** | `vault-01` | `10.10.10.11` | `8200/tcp` (API), `8201/tcp` (Cluster) | `pve-01` (Standalone) |
+| **Vault Node 2** | `vault-02` | `10.10.10.12` | `8200/tcp` (API), `8201/tcp` (Cluster) | `pve-01` (Standalone) |
+| **Vault Node 3** | `vault-03` | `10.10.10.13` | `8200/tcp` (API), `8201/tcp` (Cluster) | `pve-02` (Standalone) |
+| **Transit Vault** | `vault-transit` | `10.10.10.10` | `8200/tcp` (API) | `pve-02` (Standalone) |

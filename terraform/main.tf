@@ -1,6 +1,8 @@
+# Proxmox Host 1 Provider (Standalone)
 provider "proxmox" {
-  endpoint  = var.proxmox_endpoint
-  api_token = var.proxmox_api_token
+  alias     = "pve1"
+  endpoint  = var.pve_host_1_endpoint
+  api_token = var.pve_host_1_api_token
   insecure  = var.proxmox_insecure
 
   ssh {
@@ -8,11 +10,14 @@ provider "proxmox" {
   }
 }
 
-locals {
-  vm_nodes = {
-    for k, v in var.nodes : k => v if v.type == "vm"
-  }
-  lxc_nodes = {
-    for k, v in var.nodes : k => v if v.type == "lxc"
+# Proxmox Host 2 Provider (Standalone)
+provider "proxmox" {
+  alias     = "pve2"
+  endpoint  = var.pve_host_2_endpoint
+  api_token = var.pve_host_2_api_token
+  insecure  = var.proxmox_insecure
+
+  ssh {
+    agent = true
   }
 }
