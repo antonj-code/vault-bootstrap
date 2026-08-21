@@ -77,10 +77,16 @@ variable "ssh_public_keys" {
   default     = []
 }
 
+variable "template_vm_id" {
+  description = "Proxmox VM ID of the CIS Level 2 AlmaLinux 9 template on colossus and guardian"
+  type        = number
+  default     = 1000
+}
+
 variable "ci_user" {
   description = "Cloud-Init default administrator username"
   type        = string
-  default     = "debian"
+  default     = "almalinux"
 }
 
 # --- Sizing ---
@@ -112,14 +118,8 @@ variable "vault_lxc_config" {
   }
 }
 
-variable "vm_cloud_image_url" {
-  description = "URL to download Debian 12 GenericCloud image if not using an existing template"
-  type        = string
-  default     = "https://cloud.debian.org/images/cloud/bookworm/latest/debian-12-genericcloud-amd64.raw"
-}
-
 variable "lxc_template_path" {
-  description = "Volume ID / Path of the LXC OS template (e.g. local:vztmpl/debian-12-standard_12.7-1_amd64.tar.zst)"
+  description = "Volume ID / Path of the LXC OS template (e.g. local:vztmpl/debian-12-standard_12.7-1_amd64.tar.zst or almalinux-9)"
   type        = string
   default     = "local:vztmpl/debian-12-standard_12.7-1_amd64.tar.zst"
 }

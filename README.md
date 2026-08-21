@@ -46,8 +46,8 @@ flowchart TB
 
 In a 3-node Raft consensus cluster, quorum requires a strict majority of **2 nodes** ($Q = \lfloor 3/2 \rfloor + 1 = 2$). Across your 2 standalone physical hosts:
 
-* **Host 1 (`colossus`)**: `vm-vault-01` (`192.169.0.201`), `vm-vault-02` (`192.169.0.202`) — Holds 2 Raft voting members.
-* **Host 2 (`guardian`)**: `vm-vault-03` (`192.169.0.203`), `vm-vault-transit` (`192.169.0.200`) — Holds 1 Raft voting member + Transit Auto-Unseal oracle.
+* **Host 1 (`colossus`)**: `vm-vault-01` (`192.169.0.201`), `vm-vault-02` (`192.169.0.202`) — Cloned from AlmaLinux 9 CIS Level 2 template (ID 1000). Holds 2 Raft voting members.
+* **Host 2 (`guardian`)**: `vm-vault-03` (`192.169.0.203`) [Cloned from Template 1000], `vm-vault-transit` (`192.169.0.200`) [LXC] — Holds 1 Raft voting member + Transit Auto-Unseal oracle.
 * **Hypervisor Independence**: Because `colossus` and `guardian` are non-clustered standalone hosts, they have complete failure isolation with zero inter-hypervisor dependencies.
 
 ### Failure Scenarios & Mitigations

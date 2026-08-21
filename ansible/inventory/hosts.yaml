@@ -1,6 +1,6 @@
 all:
   vars:
-    ansible_user: debian
+    ansible_user: almalinux
     ansible_ssh_common_args: '-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null'
   children:
     vault_cluster:

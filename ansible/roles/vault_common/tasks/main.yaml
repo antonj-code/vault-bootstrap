@@ -1,5 +1,23 @@
 ---
-- name: Update apt cache and install core dependencies
+# --- Multi-Distribution Package Installation ---
+- name: Install dependencies on RedHat / AlmaLinux family
+  ansible.builtin.dnf:
+    name:
+      - ca-certificates
+      - curl
+      - gnupg2
+      - jq
+      - libcap
+      - unzip
+      - tar
+      - procps-ng
+      - sudo
+      - policycoreutils-python-utils
+      - firewalld
+    state: present
+  when: ansible_os_family == 'RedHat'
+
+- name: Install dependencies on Debian / Ubuntu family
   ansible.builtin.apt:
     update_cache: true
     cache_valid_time: 3600
@@ -15,7 +33,28 @@
       - procps
       - sudo
     state: present
+  when: ansible_os_family == 'Debian'
 
+# --- Firewall Configuration (AlmaLinux / RHEL with CIS Benchmark) ---
+- name: Ensure firewalld is started and enabled
+  ansible.builtin.systemd:
+    name: firewalld
+    state: started
+    enabled: true
+  when: ansible_os_family == 'RedHat' and ansible_virtualization_type != 'lxc'
+
+- name: Open Vault API and Cluster ports in firewalld
+  ansible.posix.firewalld:
+    port: "{{ item }}"
+    permanent: true
+    immediate: true
+    state: enabled
+  loop:
+    - "{{ vault_api_port }}/tcp"
+    - "{{ vault_cluster_port }}/tcp"
+  when: ansible_os_family == 'RedHat' and ansible_virtualization_type != 'lxc'
+
+# --- Kernel & Sysctl Hardening ---
 - name: Configure sysctl optimizations for Vault
   ansible.posix.sysctl:
     name: "{{ item.name }}"
@@ -28,18 +67,19 @@
     - { name: 'net.core.somaxconn', value: '4096' }
   when: ansible_virtualization_type != 'lxc'
 
+# --- Vault User & Directory Layout ---
 - name: Create vault system group
   ansible.builtin.group:
     name: "{{ vault_group }}"
     state: present
     system: true
 
-- name: Create vault system user
+- name: Create vault system user (CIS compliant nologin shell)
   ansible.builtin.user:
     name: "{{ vault_user }}"
     group: "{{ vault_group }}"
     home: "/opt/vault"
-    shell: "/bin/false"
+    shell: "/sbin/nologin"
     system: true
     state: present
 
@@ -57,6 +97,7 @@
     - "{{ vault_data_dir }}"
     - "{{ vault_log_dir }}"
 
+# --- Vault Binary Installation ---
 - name: Check if Vault binary is already installed
   ansible.builtin.stat:
     path: "/usr/local/bin/vault"
@@ -85,6 +126,27 @@
         path: "/tmp/vault_{{ vault_version }}_linux_amd64.zip"
         state: absent
 
+# --- SELinux & Linux Capabilities Hardening ---
+- name: Configure SELinux file contexts on RedHat / AlmaLinux
+  when: ansible_os_family == 'RedHat' and ansible_virtualization_type != 'lxc'
+  block:
+    - name: Set SELinux file context for /usr/local/bin/vault
+      community.general.sefcontext:
+        target: '/usr/local/bin/vault'
+        setype: bin_t
+        state: present
+
+    - name: Set SELinux file context for /opt/vault
+      community.general.sefcontext:
+        target: '/opt/vault(/.*)?'
+        setype: var_lib_t
+        state: present
+
+    - name: Apply SELinux context changes (restorecon)
+      ansible.builtin.command:
+        cmd: restorecon -Rv /usr/local/bin/vault /opt/vault {{ vault_config_dir }}
+      changed_when: false
+
 - name: Grant Vault binary IPC_LOCK capability
   ansible.builtin.capabilities:
     path: "/usr/local/bin/vault"
@@ -92,6 +154,7 @@
     state: present
   when: ansible_virtualization_type != 'lxc'
 
+# --- Systemd Service & CLI Profile ---
 - name: Deploy Vault systemd service unit
   ansible.builtin.template:
     src: vault.service.j2

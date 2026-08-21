@@ -24,7 +24,9 @@ ssh_public_keys = [
   "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGitlabRunnerKeyHereSamplePublicVaultAccess root@gitlab"
 ]
 
-ci_user = "debian"
+# VM Template (AlmaLinux 9 CIS Level 2)
+template_vm_id = 1000
+ci_user        = "almalinux"
 
 # Resource Sizing
 vault_vm_config = {
@@ -39,9 +41,7 @@ vault_lxc_config = {
   disk_size = 8
 }
 
-# Image Sources
-vm_cloud_image_url = "https://cloud.debian.org/images/cloud/bookworm/latest/debian-12-genericcloud-amd64.raw"
-lxc_template_path  = "local:vztmpl/debian-12-standard_12.7-1_amd64.tar.zst"
+lxc_template_path = "local:vztmpl/debian-12-standard_12.7-1_amd64.tar.zst"
 
 # Node IP and Host Allocation
 host1_vms = {

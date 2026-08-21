@@ -120,3 +120,25 @@ sequenceDiagram
 | **Vault Node 2** | `vm-vault-02` | `192.169.0.202` | `8200/tcp` (API), `8201/tcp` (Cluster) | `colossus` (Standalone) |
 | **Vault Node 3** | `vm-vault-03` | `192.169.0.203` | `8200/tcp` (API), `8201/tcp` (Cluster) | `guardian` (Standalone) |
 | **Transit Vault** | `vm-vault-transit` | `192.169.0.200` | `8200/tcp` (API) | `guardian` (Standalone) |
+
+---
+
+## 5. Security Hardening & CIS Level 2 Compliance
+
+The 3 Main Vault cluster VMs are provisioned by cloning an **AlmaLinux 9 CIS Level 2 hardened template (ID 1000)** with automated Ansible compliance adaptations:
+
+1. **SELinux in Enforcing Mode**:
+   * Proper file contexts (`bin_t`, `etc_t`, `var_lib_t`) applied via `community.general.sefcontext` and `restorecon`.
+   * Restricts unauthorized process memory inspection or unexpected filesystem writes.
+2. **Firewalld Hardening**:
+   * Host firewall enforces default-deny ingress policy.
+   * Scoped ports explicitly allowed: `8200/tcp` (Vault API) and `8201/tcp` (Vault Raft Cluster Communication).
+3. **Memory Locking & Anti-Swap (`mlock` / `cap_ipc_lock`)**:
+   * Linux capability `cap_ipc_lock=+ep` granted to `/usr/local/bin/vault`.
+   * Systemd service configured with `LimitMEMLOCK=infinity` to guarantee secrets in memory are never paged to disk.
+4. **Sandboxed Dedicated System User**:
+   * Unprivileged `vault:vault` service account configured with a non-interactive shell (`/sbin/nologin`).
+   * Sandboxed systemd directives: `ProtectSystem=full`, `PrivateTmp=yes`, `NoNewPrivileges=yes`.
+5. **Mutual TLS (mTLS) & CA Trust Integration**:
+   * Root CA automatically installed into AlmaLinux trust store (`/etc/pki/ca-trust/source/anchors/`) and compiled via `update-ca-trust extract`.
+   * Strict TLS 1.3 enforced on API and Raft replication listeners.

@@ -1,27 +1,22 @@
 # ==============================================================================
-# PROXMOX HOST 1 (Standalone pve-01): vault-01, vault-02
+# PROXMOX HOST 1 (Standalone colossus): vm-vault-01, vm-vault-02
+# Cloned from AlmaLinux 9 CIS Level 2 Template (ID 1000)
 # ==============================================================================
 
-# Download base Debian 12 Cloud Image on Host 1
-resource "proxmox_virtual_environment_download_file" "debian_cloud_image_host1" {
-  provider     = proxmox.pve1
-  content_type = "iso"
-  datastore_id = var.snippet_datastore
-  node_name    = var.pve_host_1_node_name
-  url          = var.vm_cloud_image_url
-  file_name    = "debian-12-genericcloud-amd64.img"
-}
-
-# Provision vault-01 and vault-02 on Host 1
 resource "proxmox_virtual_environment_vm" "vault_nodes_host1" {
   provider  = proxmox.pve1
   for_each  = var.host1_vms
   name      = each.key
   node_name = var.pve_host_1_node_name
   vm_id     = each.value.vmid
-  tags      = ["vault", "raft", "host1"]
+  tags      = ["vault", "raft", "host1", "almalinux9", "cis2"]
 
   description = each.value.description
+
+  clone {
+    vm_id = var.template_vm_id
+    full  = true
+  }
 
   cpu {
     cores = var.vault_vm_config.cores
@@ -40,8 +35,7 @@ resource "proxmox_virtual_environment_vm" "vault_nodes_host1" {
 
   disk {
     datastore_id = var.storage_datastore
-    file_id      = proxmox_virtual_environment_download_file.debian_cloud_image_host1.id
-    interface    = "virtio0"
+    interface    = "scsi0"
     iothread     = true
     discard      = "on"
     size         = var.vault_vm_config.disk_size
@@ -78,29 +72,24 @@ resource "proxmox_virtual_environment_vm" "vault_nodes_host1" {
 }
 
 # ==============================================================================
-# PROXMOX HOST 2 (Standalone pve-02): vault-03
+# PROXMOX HOST 2 (Standalone guardian): vm-vault-03
+# Cloned from AlmaLinux 9 CIS Level 2 Template (ID 1000)
 # ==============================================================================
 
-# Download base Debian 12 Cloud Image on Host 2
-resource "proxmox_virtual_environment_download_file" "debian_cloud_image_host2" {
-  provider     = proxmox.pve2
-  content_type = "iso"
-  datastore_id = var.snippet_datastore
-  node_name    = var.pve_host_2_node_name
-  url          = var.vm_cloud_image_url
-  file_name    = "debian-12-genericcloud-amd64.img"
-}
-
-# Provision vault-03 on Host 2
 resource "proxmox_virtual_environment_vm" "vault_nodes_host2" {
   provider  = proxmox.pve2
   for_each  = var.host2_vms
   name      = each.key
   node_name = var.pve_host_2_node_name
   vm_id     = each.value.vmid
-  tags      = ["vault", "raft", "host2"]
+  tags      = ["vault", "raft", "host2", "almalinux9", "cis2"]
 
   description = each.value.description
+
+  clone {
+    vm_id = var.template_vm_id
+    full  = true
+  }
 
   cpu {
     cores = var.vault_vm_config.cores
@@ -119,8 +108,7 @@ resource "proxmox_virtual_environment_vm" "vault_nodes_host2" {
 
   disk {
     datastore_id = var.storage_datastore
-    file_id      = proxmox_virtual_environment_download_file.debian_cloud_image_host2.id
-    interface    = "virtio0"
+    interface    = "scsi0"
     iothread     = true
     discard      = "on"
     size         = var.vault_vm_config.disk_size

@@ -103,18 +103,33 @@
     group: "{{ vault_group }}"
     mode: '0644'
 
-- name: Install CA certificate in node system trust store
+- name: Install CA certificate in Debian system trust store
   ansible.builtin.copy:
     src: "{{ vault_local_credentials_dir }}/tls/ca.crt"
     dest: "/usr/local/share/ca-certificates/vault-ca.crt"
     owner: root
     group: root
     mode: '0644'
-  register: ca_trust_install
+  when: ansible_os_family == 'Debian'
+  register: ca_trust_install_debian
 
-- name: Update system CA certificates
+- name: Update system CA certificates (Debian)
   ansible.builtin.command: update-ca-certificates
-  when: ca_trust_install.changed
+  when: ansible_os_family == 'Debian' and ca_trust_install_debian.changed
+
+- name: Install CA certificate in RedHat / AlmaLinux trust store
+  ansible.builtin.copy:
+    src: "{{ vault_local_credentials_dir }}/tls/ca.crt"
+    dest: "/etc/pki/ca-trust/source/anchors/vault-ca.crt"
+    owner: root
+    group: root
+    mode: '0644'
+  when: ansible_os_family == 'RedHat'
+  register: ca_trust_install_redhat
+
+- name: Update system CA certificates (RedHat / AlmaLinux)
+  ansible.builtin.command: update-ca-trust extract
+  when: ansible_os_family == 'RedHat' and ca_trust_install_redhat.changed
 
 - name: Distribute node TLS certificate
   ansible.builtin.copy:
