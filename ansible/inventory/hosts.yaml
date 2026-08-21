@@ -8,19 +8,19 @@ all:
         vault-01:
           ansible_host: 10.10.10.11
           vault_node_id: 501
-          pve_host: pve-01
+          pve_host: colossus
         vault-02:
           ansible_host: 10.10.10.12
           vault_node_id: 502
-          pve_host: pve-01
+          pve_host: colossus
         vault-03:
           ansible_host: 10.10.10.13
           vault_node_id: 503
-          pve_host: pve-02
+          pve_host: guardian
     vault_transit:
       hosts:
         vault-transit:
           ansible_host: 10.10.10.10
           vault_node_id: 500
-          pve_host: pve-02
+          pve_host: guardian
           ansible_user: root

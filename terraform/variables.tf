@@ -13,12 +13,12 @@ variable "pve_host_1_api_token" {
 variable "pve_host_1_node_name" {
   description = "Proxmox internal node name for Host 1"
   type        = string
-  default     = "pve-01"
+  default     = "colossus"
 }
 
 # --- Proxmox Host 2 Connection ---
 variable "pve_host_2_endpoint" {
-  description = "The Proxmox VE API endpoint for Host 2 (e.g., https://10.10.10.3:8006/)"
+  description = "The Proxmox VE API endpoint for Host 2 (e.g., https://guardian.jnet.lan:8006/)"
   type        = string
 }
 
@@ -31,7 +31,7 @@ variable "pve_host_2_api_token" {
 variable "pve_host_2_node_name" {
   description = "Proxmox internal node name for Host 2"
   type        = string
-  default     = "pve-02"
+  default     = "guardian"
 }
 
 variable "proxmox_insecure" {

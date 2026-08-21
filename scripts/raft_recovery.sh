@@ -2,13 +2,13 @@
 set -euo pipefail
 
 # ==============================================================================
-# Raft Quorum Disaster Recovery Script (Host 1 Outage)
-# Use ONLY when Host 1 (pve-01) suffers permanent hardware failure and
-# vault-03 (on Host 2) must be promoted to a single-node quorum leader.
+# Raft Quorum Disaster Recovery Script (Host 1 / colossus Outage)
+# Use ONLY when Host 1 (colossus) suffers permanent hardware failure and
+# vault-03 (on Host 2 / guardian) must be promoted to a single-node quorum leader.
 # ==============================================================================
 
 echo "=== Vault Raft Single-Node Quorum Recovery Utility ==="
-echo "WARNING: This procedure should ONLY be run if Host 1 (vault-01 and vault-02) is unrecoverable."
+echo "WARNING: This procedure should ONLY be run if Host 1 / colossus (vault-01 and vault-02) is unrecoverable."
 read -p "Are you sure you want to force single-node recovery on vault-03? (y/N): " confirm
 
 if [[ "${confirm}" != "y" && "${confirm}" != "Y" ]]; then

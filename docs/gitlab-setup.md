@@ -1,14 +1,14 @@
 # GitLab CI/CD Pipeline Setup on gitbox.jnet.lan
 
-This guide provides the exact configuration steps required to connect **`gitbox.jnet.lan`** to your **two standalone Proxmox VE hosts** (`pve-01` and `pve-02`) for automated Vault deployment.
+This guide provides the exact configuration steps required to connect **`gitbox.jnet.lan`** to your two standalone Proxmox VE hosts (**`colossus`** and **`guardian`**) for automated Vault deployment.
 
 ---
 
 ## 1. Proxmox CI/CD Service Accounts & API Tokens
 
-Because `pve-01` and `pve-02` are independent, standalone hosts (not in a Corosync cluster), create the service user and API token on **both hosts**:
+Because **`colossus`** and **`guardian`** are independent, standalone hosts (not in a cluster), create the service user and API token on **both hosts**:
 
-### Run on BOTH `pve-01` AND `pve-02`:
+### Run on BOTH `colossus` AND `guardian`:
 
 ```bash
 # 1. Create a dedicated role with required VM/LXC and storage privileges
@@ -48,10 +48,10 @@ Navigate to **Settings** $\rightarrow$ **CI/CD** $\rightarrow$ **Variables** $\r
 
 | Variable Name | Type | Masked | Value Description / Example |
 |---|---|---|---|
-| `TF_VAR_pve_host_1_endpoint` | Variable | No | `https://10.10.10.2:8006/` |
-| `TF_VAR_pve_host_1_api_token` | Variable | **Yes** | `terraform-ci@pve!gitlab-runner=xxxxxxxx-...` (Host 1 token) |
-| `TF_VAR_pve_host_2_endpoint` | Variable | No | `https://10.10.10.3:8006/` |
-| `TF_VAR_pve_host_2_api_token` | Variable | **Yes** | `terraform-ci@pve!gitlab-runner=yyyyyyyy-...` (Host 2 token) |
+| `TF_VAR_pve_host_1_endpoint` | Variable | No | `https://colossus.jnet.lan:8006/` (or Host 1 IP) |
+| `TF_VAR_pve_host_1_api_token` | Variable | **Yes** | `terraform-ci@pve!gitlab-runner=xxxxxxxx-...` (from colossus) |
+| `TF_VAR_pve_host_2_endpoint` | Variable | No | `https://guardian.jnet.lan:8006/` (or Host 2 IP) |
+| `TF_VAR_pve_host_2_api_token` | Variable | **Yes** | `terraform-ci@pve!gitlab-runner=yyyyyyyy-...` (from guardian) |
 | `TF_VAR_ssh_public_keys` | Variable | No | `["ssh-ed25519 AAAAC3NzaC1lZDI1NTE5... gitlab-runner@gitbox.jnet.lan"]` |
 | `SSH_PRIVATE_KEY` | Variable | **Yes** | Entire content of `vault_deploy_key` (including headers) |
 
@@ -62,6 +62,6 @@ Navigate to **Settings** $\rightarrow$ **CI/CD** $\rightarrow$ **Variables** $\r
 When code is committed or merged to `main`:
 1. **`validate`**: Runs `terraform fmt` and `ansible-lint`.
 2. **`plan`**: Creates a deterministic execution plan against GitLab HTTP backend.
-3. **`apply`**: Deploys `vault-01` and `vault-02` on `pve-01`, and `vault-03` + `vault-transit` on `pve-02`.
+3. **`apply`**: Deploys `vault-01` and `vault-02` on `colossus`, and `vault-03` + `vault-transit` on `guardian`.
 4. **`configure`**: Executes Ansible roles (`vault_common`, `vault_pki`, `vault_transit`, `vault_cluster`).
 5. **`verify`**: Runs automated `/v1/sys/health` probes across all 4 instances.
