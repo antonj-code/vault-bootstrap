@@ -68,7 +68,8 @@ vault-bootstrap/
 ├── .gitlab-ci.yml                  # End-to-end GitOps pipeline (Plan -> Apply -> Ansible -> Verify)
 ├── README.md                       # Comprehensive operational guide
 ├── docs/
-│   └── architecture.md             # Deep-dive architecture and threat model
+│   ├── architecture.md             # Deep-dive architecture and threat model
+│   └── gitlab-setup.md             # GitLab CI/CD & Corosync QDevice setup guide on gitbox.jnet.lan
 ├── terraform/                      # OpenTofu / Terraform Proxmox IaC
 │   ├── versions.tf                 # bpg/proxmox provider & GitLab HTTP backend
 │   ├── variables.tf                # Cluster nodes, IP subnets, credentials
