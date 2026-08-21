@@ -1,0 +1,144 @@
+stages:
+  - validate
+  - plan
+  - apply
+  - configure
+  - verify
+
+variables:
+  TF_ROOT: "${CI_PROJECT_DIR}/terraform"
+  TF_ADDRESS: "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/terraform/state/vault-production"
+  TF_IN_AUTOMATION: "true"
+  ANSIBLE_ROOT: "${CI_PROJECT_DIR}/ansible"
+  ANSIBLE_FORCE_COLOR: "true"
+
+default:
+  tags:
+    - gitlab-runner
+
+# -------------------------------------------------------------------
+# Stage: Validate & Linting
+# -------------------------------------------------------------------
+terraform:validate:
+  stage: validate
+  image: hashicorp/terraform:1.8.5
+  before_script:
+    - cd ${TF_ROOT}
+    - terraform init -backend=false
+  script:
+    - terraform fmt -check
+    - terraform validate
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+
+ansible:lint:
+  stage: validate
+  image: cytopia/ansible-lint:latest
+  before_script:
+    - cd ${ANSIBLE_ROOT}
+  script:
+    - ansible-playbook --syntax-check playbooks/site.yaml
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+
+# -------------------------------------------------------------------
+# Stage: Terraform Plan
+# -------------------------------------------------------------------
+terraform:plan:
+  stage: plan
+  image: hashicorp/terraform:1.8.5
+  before_script:
+    - cd ${TF_ROOT}
+    - terraform init \
+        -backend-config="address=${TF_ADDRESS}" \
+        -backend-config="lock_address=${TF_ADDRESS}/lock" \
+        -backend-config="unlock_address=${TF_ADDRESS}/lock" \
+        -backend-config="username=gitlab-ci-token" \
+        -backend-config="password=${CI_JOB_TOKEN}" \
+        -backend-config="lock_method=POST" \
+        -backend-config="unlock_method=DELETE" \
+        -backend-config="retry_wait_min=5"
+  script:
+    - terraform plan -out=tfplan -input=false
+  artifacts:
+    name: "plan-${CI_COMMIT_SHA}"
+    paths:
+      - ${TF_ROOT}/tfplan
+      - ${TF_ROOT}/.terraform.lock.hcl
+    expire_in: 7 days
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+
+# -------------------------------------------------------------------
+# Stage: Terraform Apply
+# -------------------------------------------------------------------
+terraform:apply:
+  stage: apply
+  image: hashicorp/terraform:1.8.5
+  before_script:
+    - cd ${TF_ROOT}
+    - terraform init \
+        -backend-config="address=${TF_ADDRESS}" \
+        -backend-config="lock_address=${TF_ADDRESS}/lock" \
+        -backend-config="unlock_address=${TF_ADDRESS}/lock" \
+        -backend-config="username=gitlab-ci-token" \
+        -backend-config="password=${CI_JOB_TOKEN}" \
+        -backend-config="lock_method=POST" \
+        -backend-config="unlock_method=DELETE" \
+        -backend-config="retry_wait_min=5"
+  script:
+    - terraform apply -input=false tfplan
+  artifacts:
+    name: "inventory-${CI_COMMIT_SHA}"
+    paths:
+      - ${ANSIBLE_ROOT}/inventory/hosts.yaml
+    expire_in: 7 days
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+
+# -------------------------------------------------------------------
+# Stage: Ansible Configuration Management
+# -------------------------------------------------------------------
+ansible:configure:
+  stage: configure
+  image: alpine/ansible:latest
+  before_script:
+    - apk add --no-cache openssh-client openssl jq curl
+    - eval $(ssh-agent -s)
+    - echo "$SSH_PRIVATE_KEY" | tr -d '\r' | ssh-add -
+    - mkdir -p ~/.ssh
+    - chmod 700 ~/.ssh
+    - echo -e "Host *\n\tStrictHostKeyChecking no\n\n" > ~/.ssh/config
+    - cd ${ANSIBLE_ROOT}
+  script:
+    - ansible-playbook -i inventory/hosts.yaml playbooks/site.yaml
+  artifacts:
+    name: "vault-credentials-${CI_COMMIT_SHA}"
+    paths:
+      - credentials/
+    expire_in: 30 days
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+
+# -------------------------------------------------------------------
+# Stage: Verification & Cluster Health
+# -------------------------------------------------------------------
+vault:verify:
+  stage: verify
+  image: alpine:latest
+  before_script:
+    - apk add --no-cache curl jq
+  script:
+    - echo "Executing Vault cluster health check across active nodes..."
+    - |
+      for ip in 10.10.10.11 10.10.10.12 10.10.10.13; do
+        echo "Querying Node ${ip}:8200..."
+        curl -k -s "https://${ip}:8200/v1/sys/health" | jq . || true
+      done
+    - echo "Checking Transit Auto-Unseal Node 10.10.10.10:8200..."
+    - curl -k -s "https://10.10.10.10:8200/v1/sys/health" | jq . || true
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
