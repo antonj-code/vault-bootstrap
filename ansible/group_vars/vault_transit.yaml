@@ -1,0 +1,15 @@
+---
+vault_node_type: "transit"
+vault_cluster_name: "vault-transit-autounseal"
+vault_storage_type: "file"
+
+# Transit Vault unseal parameters
+transit_key_shares: 1
+transit_key_threshold: 1
+
+# Transit key settings
+transit_key_name: "vault-unseal-key"
+transit_key_type: "aes256-gcm96"
+
+# LXC container environment adjustments
+vault_disable_mlock: true

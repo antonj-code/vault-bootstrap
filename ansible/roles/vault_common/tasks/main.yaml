@@ -1,0 +1,114 @@
+---
+- name: Update apt cache and install core dependencies
+  ansible.builtin.apt:
+    update_cache: true
+    cache_valid_time: 3600
+    name:
+      - apt-transport-https
+      - ca-certificates
+      - curl
+      - gnupg
+      - jq
+      - libcap2-bin
+      - unzip
+      - tar
+      - procps
+      - sudo
+    state: present
+
+- name: Configure sysctl optimizations for Vault
+  ansible.posix.sysctl:
+    name: "{{ item.name }}"
+    value: "{{ item.value }}"
+    state: present
+    reload: true
+  loop:
+    - { name: 'vm.swappiness', value: '1' }
+    - { name: 'vm.max_map_count', value: '262144' }
+    - { name: 'net.core.somaxconn', value: '4096' }
+  when: ansible_virtualization_type != 'lxc'
+
+- name: Create vault system group
+  ansible.builtin.group:
+    name: "{{ vault_group }}"
+    state: present
+    system: true
+
+- name: Create vault system user
+  ansible.builtin.user:
+    name: "{{ vault_user }}"
+    group: "{{ vault_group }}"
+    home: "/opt/vault"
+    shell: "/bin/false"
+    system: true
+    state: present
+
+- name: Create required Vault directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: "{{ vault_user }}"
+    group: "{{ vault_group }}"
+    mode: '0750'
+  loop:
+    - "{{ vault_config_dir }}"
+    - "{{ vault_tls_dir }}"
+    - "/opt/vault"
+    - "{{ vault_data_dir }}"
+    - "{{ vault_log_dir }}"
+
+- name: Check if Vault binary is already installed
+  ansible.builtin.stat:
+    path: "/usr/local/bin/vault"
+  register: vault_bin_stat
+
+- name: Download and install HashiCorp Vault binary
+  when: not vault_bin_stat.stat.exists
+  block:
+    - name: Download Vault zip archive
+      ansible.builtin.get_url:
+        url: "https://releases.hashicorp.com/vault/{{ vault_version }}/vault_{{ vault_version }}_linux_amd64.zip"
+        dest: "/tmp/vault_{{ vault_version }}_linux_amd64.zip"
+        mode: '0644'
+
+    - name: Extract Vault binary
+      ansible.builtin.unarchive:
+        src: "/tmp/vault_{{ vault_version }}_linux_amd64.zip"
+        dest: "/usr/local/bin"
+        remote_src: true
+        owner: "root"
+        group: "root"
+        mode: '0755'
+
+    - name: Remove temporary zip archive
+      ansible.builtin.file:
+        path: "/tmp/vault_{{ vault_version }}_linux_amd64.zip"
+        state: absent
+
+- name: Grant Vault binary IPC_LOCK capability
+  ansible.builtin.capabilities:
+    path: "/usr/local/bin/vault"
+    capability: cap_ipc_lock=+ep
+    state: present
+  when: ansible_virtualization_type != 'lxc'
+
+- name: Deploy Vault systemd service unit
+  ansible.builtin.template:
+    src: vault.service.j2
+    dest: /etc/systemd/system/vault.service
+    owner: root
+    group: root
+    mode: '0644'
+  notify:
+    - Reload systemd daemon
+    - Restart vault
+
+- name: Setup environment variable profile for CLI access
+  ansible.builtin.copy:
+    dest: /etc/profile.d/vault.sh
+    content: |
+      export VAULT_ADDR="https://127.0.0.1:{{ vault_api_port }}"
+      export VAULT_CACERT="{{ vault_tls_dir }}/ca.crt"
+    owner: root
+    group: root
+    mode: '0644'

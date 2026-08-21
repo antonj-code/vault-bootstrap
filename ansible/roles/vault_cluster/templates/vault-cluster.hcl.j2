@@ -1,0 +1,40 @@
+ui = true
+disable_mlock = {{ vault_disable_mlock | lower }}
+
+cluster_name = "{{ vault_cluster_name }}"
+cluster_addr = "https://{{ ansible_host }}:{{ vault_cluster_port }}"
+api_addr     = "https://{{ ansible_host }}:{{ vault_api_port }}"
+
+storage "raft" {
+  path    = "{{ vault_data_dir }}"
+  node_id = "{{ inventory_hostname }}"
+
+{% for host in groups['vault_cluster'] %}
+{% if host != inventory_hostname %}
+  retry_join {
+    leader_api_addr         = "https://{{ hostvars[host]['ansible_host'] }}:{{ vault_api_port }}"
+    leader_ca_cert_file     = "{{ vault_tls_dir }}/ca.crt"
+    leader_client_cert_file = "{{ vault_tls_dir }}/vault.crt"
+    leader_client_key_file  = "{{ vault_tls_dir }}/vault.key"
+  }
+{% endif %}
+{% endfor %}
+}
+
+seal "transit" {
+  address         = "https://{{ vault_transit_host }}:{{ vault_transit_port }}"
+  token           = "{{ transit_unseal_token }}"
+  disable_renewal = "false"
+  key_name        = "{{ vault_transit_key_name }}"
+  mount_path      = "{{ vault_transit_mount }}/"
+  tls_ca_cert     = "{{ vault_tls_dir }}/ca.crt"
+  tls_skip_verify = "false"
+}
+
+listener "tcp" {
+  address         = "0.0.0.0:{{ vault_api_port }}"
+  cluster_address = "0.0.0.0:{{ vault_cluster_port }}"
+  tls_cert_file   = "{{ vault_tls_dir }}/vault.crt"
+  tls_key_file    = "{{ vault_tls_dir }}/vault.key"
+  tls_min_version = "tls12"
+}

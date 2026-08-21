@@ -1,0 +1,26 @@
+all:
+  vars:
+    ansible_user: debian
+    ansible_ssh_common_args: '-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null'
+  children:
+    vault_cluster:
+      hosts:
+        vault-01:
+          ansible_host: 10.10.10.11
+          vault_node_id: 501
+          pve_host: pve-01
+        vault-02:
+          ansible_host: 10.10.10.12
+          vault_node_id: 502
+          pve_host: pve-01
+        vault-03:
+          ansible_host: 10.10.10.13
+          vault_node_id: 503
+          pve_host: pve-02
+    vault_transit:
+      hosts:
+        vault-transit:
+          ansible_host: 10.10.10.10
+          vault_node_id: 500
+          pve_host: pve-02
+          ansible_user: root

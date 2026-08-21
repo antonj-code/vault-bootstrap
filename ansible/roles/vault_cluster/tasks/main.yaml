@@ -1,0 +1,93 @@
+---
+- name: Read Auto-Unseal token from control node
+  ansible.builtin.set_fact:
+    transit_unseal_token: "{{ lookup('file', vault_local_credentials_dir + '/autounseal_token.txt') | trim }}"
+
+- name: Render Main Vault cluster configuration
+  ansible.builtin.template:
+    src: vault-cluster.hcl.j2
+    dest: "{{ vault_config_dir }}/vault.hcl"
+    owner: "{{ vault_user }}"
+    group: "{{ vault_group }}"
+    mode: '0640'
+  notify: Restart vault
+
+- name: Flush handlers to apply configuration
+  ansible.builtin.meta: flush_handlers
+
+- name: Ensure Vault cluster service is started and enabled
+  ansible.builtin.systemd:
+    name: vault
+    state: started
+    enabled: true
+
+- name: Wait for Vault cluster API to become reachable
+  ansible.builtin.wait_for:
+    host: 127.0.0.1
+    port: "{{ vault_api_port }}"
+    delay: 2
+    timeout: 30
+
+- name: Bootstrap cluster on Primary Node
+  when: inventory_hostname == vault_primary_node
+  block:
+    - name: Check Primary Node initialization status
+      ansible.builtin.command:
+        cmd: "vault status -format=json"
+      environment:
+        VAULT_ADDR: "https://127.0.0.1:{{ vault_api_port }}"
+        VAULT_CACERT: "{{ vault_tls_dir }}/ca.crt"
+      register: primary_status_raw
+      failed_when: primary_status_raw.rc not in [0, 2]
+      changed_when: false
+
+    - name: Parse Primary Node status
+      ansible.builtin.set_fact:
+        primary_status: "{{ primary_status_raw.stdout | from_json }}"
+
+    - name: Initialize Main Vault cluster
+      when: not primary_status.initialized
+      ansible.builtin.command:
+        cmd: "vault operator init -recovery-shares={{ vault_recovery_shares }} -recovery-threshold={{ vault_recovery_threshold }} -format=json"
+      environment:
+        VAULT_ADDR: "https://127.0.0.1:{{ vault_api_port }}"
+        VAULT_CACERT: "{{ vault_tls_dir }}/ca.crt"
+      register: cluster_init_raw
+
+    - name: Save Cluster recovery keys and initial root token to control node
+      when: not primary_status.initialized
+      ansible.builtin.copy:
+        content: "{{ cluster_init_raw.stdout }}"
+        dest: "{{ vault_local_credentials_dir }}/cluster_credentials.json"
+        mode: '0600'
+      delegate_to: localhost
+      become: false
+
+- name: Wait for standby nodes to auto-join Raft cluster
+  ansible.builtin.pause:
+    seconds: 10
+  when: inventory_hostname == vault_primary_node
+
+- name: Validate Raft cluster peer membership
+  when: inventory_hostname == vault_primary_node
+  block:
+    - name: Load Cluster root token
+      ansible.builtin.set_fact:
+        cluster_root_token: "{{ ((lookup('file', vault_local_credentials_dir + '/cluster_credentials.json') | from_json).root_token) }}"
+
+    - name: Query Raft cluster peer list
+      ansible.builtin.command:
+        cmd: "vault operator raft list-peers -format=json"
+      environment:
+        VAULT_ADDR: "https://127.0.0.1:{{ vault_api_port }}"
+        VAULT_CACERT: "{{ vault_tls_dir }}/ca.crt"
+        VAULT_TOKEN: "{{ cluster_root_token }}"
+      register: raft_peers_raw
+      retries: 6
+      delay: 5
+      until: (raft_peers_raw.stdout | from_json).data.config.servers | length >= 3
+      changed_when: false
+
+    - name: Display Raft cluster peer details
+      ansible.builtin.debug:
+        msg: "Active Raft Peers: {{ (raft_peers_raw.stdout | from_json).data.config.servers }}"

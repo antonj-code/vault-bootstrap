@@ -1,0 +1,148 @@
+---
+- name: Render Transit Vault configuration
+  ansible.builtin.template:
+    src: vault-transit.hcl.j2
+    dest: "{{ vault_config_dir }}/vault.hcl"
+    owner: "{{ vault_user }}"
+    group: "{{ vault_group }}"
+    mode: '0640'
+  notify: Restart vault
+
+- name: Flush handlers to ensure Vault is running
+  ansible.builtin.meta: flush_handlers
+
+- name: Ensure Transit Vault service is enabled and started
+  ansible.builtin.systemd:
+    name: vault
+    state: started
+    enabled: true
+
+- name: Wait for Transit Vault port to respond
+  ansible.builtin.wait_for:
+    host: 127.0.0.1
+    port: "{{ vault_api_port }}"
+    delay: 2
+    timeout: 30
+
+- name: Check Transit Vault initialization status
+  ansible.builtin.command:
+    cmd: "vault status -format=json"
+  environment:
+    VAULT_ADDR: "https://127.0.0.1:{{ vault_api_port }}"
+    VAULT_CACERT: "{{ vault_tls_dir }}/ca.crt"
+  register: transit_status_raw
+  failed_when: transit_status_raw.rc not in [0, 2] # 0 = unsealed, 2 = sealed
+  changed_when: false
+
+- name: Parse Transit Vault status JSON
+  ansible.builtin.set_fact:
+    transit_status: "{{ transit_status_raw.stdout | from_json }}"
+
+- name: Initialize Transit Vault if uninitialized
+  when: not transit_status.initialized
+  block:
+    - name: Run operator init on Transit Vault
+      ansible.builtin.command:
+        cmd: "vault operator init -key-shares={{ transit_key_shares }} -key-threshold={{ transit_key_threshold }} -format=json"
+      environment:
+        VAULT_ADDR: "https://127.0.0.1:{{ vault_api_port }}"
+        VAULT_CACERT: "{{ vault_tls_dir }}/ca.crt"
+      register: transit_init_raw
+
+    - name: Save Transit credentials to local control node
+      ansible.builtin.copy:
+        content: "{{ transit_init_raw.stdout }}"
+        dest: "{{ vault_local_credentials_dir }}/transit_credentials.json"
+        mode: '0600'
+      delegate_to: localhost
+      become: false
+
+    - name: Unseal Transit Vault
+      ansible.builtin.command:
+        cmd: "vault operator unseal {{ (transit_init_raw.stdout | from_json).unseal_keys_b64[0] }}"
+      environment:
+        VAULT_ADDR: "https://127.0.0.1:{{ vault_api_port }}"
+        VAULT_CACERT: "{{ vault_tls_dir }}/ca.crt"
+
+- name: Read Transit credentials from control node if already initialized
+  when: transit_status.initialized
+  block:
+    - name: Fetch stored Transit credentials
+      ansible.builtin.slurp:
+        src: "{{ vault_local_credentials_dir }}/transit_credentials.json"
+      delegate_to: localhost
+      become: false
+      register: stored_transit_creds
+
+    - name: Unseal Transit Vault if sealed
+      ansible.builtin.command:
+        cmd: "vault operator unseal {{ (stored_transit_creds.content | b64decode | from_json).unseal_keys_b64[0] }}"
+      environment:
+        VAULT_ADDR: "https://127.0.0.1:{{ vault_api_port }}"
+        VAULT_CACERT: "{{ vault_tls_dir }}/ca.crt"
+      when: transit_status.sealed
+
+- name: Load Transit root token
+  ansible.builtin.set_fact:
+    transit_root_token: "{{ ((lookup('file', vault_local_credentials_dir + '/transit_credentials.json') | from_json).root_token) }}"
+
+- name: Check enabled secrets engines on Transit Vault
+  ansible.builtin.command:
+    cmd: "vault secrets list -format=json"
+  environment:
+    VAULT_ADDR: "https://127.0.0.1:{{ vault_api_port }}"
+    VAULT_CACERT: "{{ vault_tls_dir }}/ca.crt"
+    VAULT_TOKEN: "{{ transit_root_token }}"
+  register: transit_secrets_list
+  changed_when: false
+
+- name: Enable Transit secrets engine
+  ansible.builtin.command:
+    cmd: "vault secrets enable -path=transit transit"
+  environment:
+    VAULT_ADDR: "https://127.0.0.1:{{ vault_api_port }}"
+    VAULT_CACERT: "{{ vault_tls_dir }}/ca.crt"
+    VAULT_TOKEN: "{{ transit_root_token }}"
+  when: "'transit/' not in (transit_secrets_list.stdout | from_json)"
+
+- name: Create or verify Transit unseal key
+  ansible.builtin.command:
+    cmd: "vault write -f transit/keys/{{ transit_key_name }} type={{ transit_key_type }}"
+  environment:
+    VAULT_ADDR: "https://127.0.0.1:{{ vault_api_port }}"
+    VAULT_CACERT: "{{ vault_tls_dir }}/ca.crt"
+    VAULT_TOKEN: "{{ transit_root_token }}"
+  register: transit_key_create
+  changed_when: transit_key_create.rc == 0
+
+- name: Write autounseal policy for Main Cluster
+  ansible.builtin.shell: |
+    vault policy write autounseal - <<'EOF'
+    path "transit/encrypt/{{ transit_key_name }}" {
+      capabilities = ["update"]
+    }
+    path "transit/decrypt/{{ transit_key_name }}" {
+      capabilities = ["update"]
+    }
+    EOF
+  environment:
+    VAULT_ADDR: "https://127.0.0.1:{{ vault_api_port }}"
+    VAULT_CACERT: "{{ vault_tls_dir }}/ca.crt"
+    VAULT_TOKEN: "{{ transit_root_token }}"
+
+- name: Generate Auto-Unseal client token for Main Cluster
+  ansible.builtin.command:
+    cmd: "vault token create -orphan -policy=autounseal -period=768h -format=json"
+  environment:
+    VAULT_ADDR: "https://127.0.0.1:{{ vault_api_port }}"
+    VAULT_CACERT: "{{ vault_tls_dir }}/ca.crt"
+    VAULT_TOKEN: "{{ transit_root_token }}"
+  register: autounseal_token_raw
+
+- name: Store Auto-Unseal token on control node
+  ansible.builtin.copy:
+    content: "{{ (autounseal_token_raw.stdout | from_json).auth.client_token }}"
+    dest: "{{ vault_local_credentials_dir }}/autounseal_token.txt"
+    mode: '0600'
+  delegate_to: localhost
+  become: false

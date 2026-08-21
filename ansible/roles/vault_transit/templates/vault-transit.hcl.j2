@@ -1,0 +1,16 @@
+ui = true
+disable_mlock = {{ vault_disable_mlock | lower }}
+
+storage "{{ vault_storage_type }}" {
+  path = "{{ vault_data_dir }}"
+}
+
+listener "tcp" {
+  address         = "0.0.0.0:{{ vault_api_port }}"
+  tls_cert_file   = "{{ vault_tls_dir }}/vault.crt"
+  tls_key_file    = "{{ vault_tls_dir }}/vault.key"
+  tls_min_version = "tls12"
+}
+
+api_addr     = "https://{{ ansible_host }}:{{ vault_api_port }}"
+cluster_name = "{{ vault_cluster_name }}"
