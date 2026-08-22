@@ -30,14 +30,14 @@ pveum user token add terraform-ci@pve gitlab-runner -privsep 0
 
 ## 2. Deployment SSH Key Pair Generation
 
-Generate a dedicated SSH key pair on your workstation or management node:
+Generate a dedicated SSH key pair in your personal user directory (outside the Git repository):
 
 ```bash
-ssh-keygen -t ed25519 -f ./vault_deploy_key -N "" -C "gitlab-runner@gitbox.jnet.lan"
+ssh-keygen -t ed25519 -f ~/.ssh/vault_deploy_key -N "" -C "gitlab-runner@gitbox.jnet.lan"
 ```
 
-* `vault_deploy_key`: Private key configured in GitLab CI/CD variables (`SSH_PRIVATE_KEY`).
-* `vault_deploy_key.pub`: Public key injected into VMs and LXC container via `TF_VAR_ssh_public_keys`.
+* `~/.ssh/vault_deploy_key`: Private key configured in GitLab CI/CD variables (`SSH_PRIVATE_KEY`). **Never commit this to Git.**
+* `~/.ssh/vault_deploy_key.pub`: Public key injected into VMs and LXC container via `TF_VAR_ssh_public_keys`.
 
 ---
 
