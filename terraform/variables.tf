@@ -119,9 +119,9 @@ variable "vault_lxc_config" {
 }
 
 variable "lxc_template_path" {
-  description = "Volume ID / Path of the LXC OS template (e.g. local:vztmpl/debian-12-standard_12.7-1_amd64.tar.zst or almalinux-9)"
+  description = "Volume ID / Path of the AlmaLinux 9 LXC OS template on guardian (e.g. local:vztmpl/almalinux-9-default_latest.tar.xz)"
   type        = string
-  default     = "local:vztmpl/debian-12-standard_12.7-1_amd64.tar.zst"
+  default     = "local:vztmpl/almalinux-9-default_latest.tar.xz"
 }
 
 # --- Host 1 Node Allocations (colossus) ---

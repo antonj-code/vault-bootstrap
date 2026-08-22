@@ -41,7 +41,7 @@ vault_lxc_config = {
   disk_size = 8
 }
 
-lxc_template_path = "local:vztmpl/debian-12-standard_12.7-1_amd64.tar.zst"
+lxc_template_path = "local:vztmpl/almalinux-9-default_latest.tar.xz"
 
 # Node IP and Host Allocation
 host1_vms = {
