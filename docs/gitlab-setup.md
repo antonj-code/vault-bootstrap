@@ -53,7 +53,11 @@ Navigate to **Settings** $\rightarrow$ **CI/CD** $\rightarrow$ **Variables** $\r
 | `TF_VAR_pve_host_2_endpoint` | Variable | No | `https://guardian.jnet.lan:8006/` (or Host 2 IP) |
 | `TF_VAR_pve_host_2_api_token` | Variable | **Yes** | `terraform-ci@pve!gitlab-runner=yyyyyyyy-...` (from guardian) |
 | `TF_VAR_ssh_public_keys` | Variable | No | `["ssh-ed25519 AAAAC3NzaC1lZDI1NTE5... gitlab-runner@gitbox.jnet.lan"]` |
-| `SSH_PRIVATE_KEY` | Variable | **Yes** | Entire content of `vault_deploy_key` (including headers) |
+| `SSH_PRIVATE_KEY` | Variable (or File) | **No** *(Unchecked)* | Entire multiline content of `~/.ssh/vault_deploy_key` (including BEGIN/END lines) |
+
+> [!NOTE]
+> **Why `SSH_PRIVATE_KEY` must have "Mask variable" unchecked**:
+> GitLab CI prohibits masking variables that contain whitespace or newline characters. Because OpenSSH private keys contain multiple lines and header spaces, leave **"Mask variable" unchecked** (or optionally set **"Protected variable"** to Yes). As long as the CI script does not explicitly `echo` the variable, it will never appear in job logs.
 
 ---
 
