@@ -72,8 +72,8 @@ variable "dns_servers" {
 }
 
 variable "ssh_public_keys" {
-  description = "List of SSH public keys injected into VMs and LXC container"
-  type        = list(string)
+  description = "SSH public keys (accepts JSON list of strings or single raw string) injected into VMs and LXC"
+  type        = any
   default     = []
 }
 

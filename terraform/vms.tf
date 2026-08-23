@@ -54,7 +54,7 @@ resource "proxmox_virtual_environment_vm" "vault_nodes_host1" {
 
     user_account {
       username = var.ci_user
-      keys     = var.ssh_public_keys
+      keys     = local.parsed_ssh_keys
     }
   }
 
@@ -126,7 +126,7 @@ resource "proxmox_virtual_environment_vm" "vault_nodes_host2" {
 
     user_account {
       username = var.ci_user
-      keys     = var.ssh_public_keys
+      keys     = local.parsed_ssh_keys
     }
   }
 

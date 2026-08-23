@@ -40,7 +40,7 @@ resource "proxmox_virtual_environment_container" "vault_transit" {
     }
 
     user_account {
-      keys = var.ssh_public_keys
+      keys = local.parsed_ssh_keys
     }
   }
 

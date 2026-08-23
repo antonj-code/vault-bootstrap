@@ -21,3 +21,7 @@ provider "proxmox" {
     agent = true
   }
 }
+
+locals {
+  parsed_ssh_keys = can(tolist(var.ssh_public_keys)) ? tolist(var.ssh_public_keys) : [tostring(var.ssh_public_keys)]
+}
