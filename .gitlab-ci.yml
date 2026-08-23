@@ -54,6 +54,15 @@ terraform:plan:
   before_script:
     - cd ${TF_ROOT}
     - |
+      RAW_KEY="${TF_VAR_ssh_public_keys:-${SSH_PUBLIC_KEY}}"
+      CLEAN_KEY=$(echo "$RAW_KEY" | sed 's/^[["'\'' ]*//;s/[]"'\'' ]*$//')
+      unset TF_VAR_ssh_public_keys
+      cat << EOF > terraform.auto.tfvars.json
+      {
+        "ssh_public_keys": ["${CLEAN_KEY}"]
+      }
+      EOF
+    - |
       terraform init \
         -backend-config="address=${TF_ADDRESS}" \
         -backend-config="lock_address=${TF_ADDRESS}/lock" \
@@ -71,6 +80,7 @@ terraform:plan:
     paths:
       - ${TF_ROOT}/tfplan
       - ${TF_ROOT}/.terraform.lock.hcl
+      - ${TF_ROOT}/terraform.auto.tfvars.json
     expire_in: 7 days
   rules:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
@@ -88,6 +98,15 @@ terraform:apply:
     - terraform:plan
   before_script:
     - cd ${TF_ROOT}
+    - |
+      RAW_KEY="${TF_VAR_ssh_public_keys:-${SSH_PUBLIC_KEY}}"
+      CLEAN_KEY=$(echo "$RAW_KEY" | sed 's/^[["'\'' ]*//;s/[]"'\'' ]*$//')
+      unset TF_VAR_ssh_public_keys
+      cat << EOF > terraform.auto.tfvars.json
+      {
+        "ssh_public_keys": ["${CLEAN_KEY}"]
+      }
+      EOF
     - |
       terraform init \
         -backend-config="address=${TF_ADDRESS}" \
