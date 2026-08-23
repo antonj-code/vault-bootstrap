@@ -12,10 +12,6 @@ variables:
   ANSIBLE_ROOT: "${CI_PROJECT_DIR}/ansible"
   ANSIBLE_FORCE_COLOR: "true"
 
-default:
-  tags:
-    - gitlab-runner
-
 # -------------------------------------------------------------------
 # Stage 1: Validate & Linting
 # -------------------------------------------------------------------
