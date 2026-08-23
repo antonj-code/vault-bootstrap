@@ -27,7 +27,7 @@ terraform:validate:
     - terraform validate
   rules:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
-    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    - if: $CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH || $CI_PIPELINE_SOURCE == "web"
 
 ansible:lint:
   stage: validate
@@ -38,7 +38,7 @@ ansible:lint:
     - ansible-playbook --syntax-check playbooks/site.yaml
   rules:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
-    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    - if: $CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH || $CI_PIPELINE_SOURCE == "web"
 
 # -------------------------------------------------------------------
 # Stage 2: Terraform Plan
@@ -67,7 +67,7 @@ terraform:plan:
     expire_in: 7 days
   rules:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
-    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    - if: $CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH || $CI_PIPELINE_SOURCE == "web"
 
 # -------------------------------------------------------------------
 # Stage 3: Terraform Apply
@@ -75,6 +75,8 @@ terraform:plan:
 terraform:apply:
   stage: apply
   image: hashicorp/terraform:1.8.5
+  dependencies:
+    - terraform:plan
   before_script:
     - cd ${TF_ROOT}
     - terraform init \
@@ -94,7 +96,7 @@ terraform:apply:
       - ${ANSIBLE_ROOT}/inventory/hosts.yaml
     expire_in: 7 days
   rules:
-    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    - if: $CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH || $CI_PIPELINE_SOURCE == "web"
 
 # -------------------------------------------------------------------
 # Stage 4: Ansible Configuration Management
@@ -102,6 +104,8 @@ terraform:apply:
 ansible:configure:
   stage: configure
   image: alpine/ansible:latest
+  dependencies:
+    - terraform:apply
   before_script:
     - apk add --no-cache openssh-client openssl jq curl
     - eval $(ssh-agent -s)
@@ -118,7 +122,7 @@ ansible:configure:
       - credentials/
     expire_in: 30 days
   rules:
-    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    - if: $CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH || $CI_PIPELINE_SOURCE == "web"
 
 # -------------------------------------------------------------------
 # Stage 5: Verification & Cluster Health
@@ -138,4 +142,4 @@ vault:verify:
     - echo "Checking Transit Auto-Unseal Node 192.169.0.200:8200..."
     - curl -k -s "https://192.169.0.200:8200/v1/sys/health" | jq . || true
   rules:
-    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    - if: $CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH || $CI_PIPELINE_SOURCE == "web"
