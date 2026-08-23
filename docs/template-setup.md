@@ -1,52 +1,81 @@
 # AlmaLinux 9 CIS Level 2 Template Setup Guide (Proxmox Template ID 1000)
 
-This guide documents the requirements, hardware settings, security compliance, user account configurations, and image sanitization procedures for creating the **AlmaLinux 9 CIS Level 2 Golden Template (ID 1000)** on `colossus` and `guardian`.
+This guide documents the exact step-by-step requirements, Proxmox hardware settings, OS installer choices, user accounts, security compliance, and image sanitization procedures for creating the **AlmaLinux 9 CIS Level 2 Golden Template (ID 1000)** on `colossus` and `guardian`.
 
 ---
 
-## 1. Proxmox VM Hardware Specifications
+## 1. Proxmox Base VM Hardware Specifications
 
-When creating the base VM in Proxmox before converting it to a template:
+When creating the base VM in the Proxmox Web UI before converting it to a template:
 
-| Parameter | Configuration | Technical Rationale |
+| Hardware Option | Setting | Why It Is Configured This Way |
 |---|---|---|
-| **VM ID** | `1000` | Matches `var.template_vm_id` in Terraform. |
-| **OS Type** | Linux (Kernel 6.x - 2.6) / `l26` | Standard 64-bit Linux kernel. |
-| **CPU** | 2 Cores, Type: `host` | Direct CPU flag pass-through for AES-NI cryptographic acceleration. |
-| **Memory** | 2048 MB | Sufficient for OS provisioning; Terraform resizes to 4096 MB for Vault nodes. |
-| **SCSI Controller** | `VirtIO SCSI single` | Dedicated VirtIO queue per disk; supports TRIM/Discard. |
-| **Hard Disk** | Bus: `SCSI 0`, Size: `20 GB`, Discard: `on`, SSD emulation: `on` | High-performance paravirtualized disk interface. |
-| **Cloud-Init Drive** | Add Cloud-Init Drive (e.g., on `local-lvm`) | Required for Proxmox to generate and mount the Cloud-Init ISO. |
-| **Network Interface** | Model: `VirtIO (paravirtualized)`, Bridge: `vmbr0` | High-throughput paravirtualized network driver. |
-| **QEMU Agent** | **Enabled** (`Options` $\rightarrow$ `QEMU Guest Agent`) | **Mandatory.** Terraform relies on the guest agent to detect IP and boot completion. |
+| **VM ID** | **`1000`** | Matches `var.template_vm_id` in Terraform. |
+| **Name** | **`almalinux-9-cis2-template`** | Clean, descriptive naming matching Packer automation. |
+| **BIOS** | **`Default (SeaBIOS)`** | Faster boot, zero EFI disk overhead, simpler cloning across standalone hosts. |
+| **TPM** | **`Disabled / None`** | Not needed for Open-Source Vault (Transit Auto-Unseal handles keys). |
+| **CPU** | **2 Cores**, Type: **`host`** | Direct CPU flag pass-through (enables hardware AES-NI encryption). |
+| **Memory** | **2048 MB** | Minimal footprint for base template; Terraform resizes VMs to 4096 MB. |
+| **SCSI Controller** | **`VirtIO SCSI single`** | Dedicated I/O queue per disk; enables TRIM/Discard. |
+| **Hard Disk (`scsi0`)** | **20 GB**, Bus: `SCSI 0` | Paravirtualized VirtIO drive. |
+| **SSD Emulation** | **`Checked (Yes)`** | Disables spinning-disk scheduler; enables multi-queue SSD scheduling for fast Raft writes. |
+| **Discard** | **`Checked (Yes)`** | Returns freed blocks to Proxmox thin storage (`local-lvm`/`local-zfs`). |
+| **IO Thread** | **`Checked (Yes)`** | Dedicates an emulated thread for disk I/O to maximize throughput. |
+| **Cloud-Init Drive** | **Add Cloud-Init Drive** | Required for Proxmox to inject IP, gateway, hostname, and SSH keys. |
+| **Network Device** | Model: **`VirtIO (paravirtualized)`**, Bridge: `vmbr0` | High-throughput paravirtualized network driver. |
+| **QEMU Guest Agent** | **`Enabled`** (`Options` $\rightarrow$ `QEMU Guest Agent`) | **Mandatory.** Terraform relies on this to detect VM boot and IP status. |
 
 ---
 
-## 2. User Accounts & Sudo Privileges
+## 2. AlmaLinux 9 Installer (Anaconda) Walkthrough
 
-### 2.1 Default Cloud-Init User (`almalinux`)
-* Cloud-Init injects credentials into the `almalinux` account (`ci_user = "almalinux"`).
-* Passwordless sudo must be enabled for Ansible automation.
+When booting from the AlmaLinux 9 ISO:
 
-Create `/etc/sudoers.d/almalinux`:
+### 2.1 User Creation Screen
+* **Full Name**: `AlmaLinux Admin`
+* **User Name**: **`almalinux`**
+* **Make this user administrator**: **`Checked (Yes)`** *(Adds user to `wheel` group)*
+* **Password**: Set a temporary password (e.g. `TempPass123!`). Cloud-Init will lock down password auth on cloned VMs and enforce SSH keys.
+
+### 2.2 Root Password Screen
+* Set **Root Password** or click **Lock root account** (recommended for CIS Level 2).
+* All administrative tasks will be executed via `sudo` from the `almalinux` user.
+
+### 2.3 Installation Destination (CIS Level 2 Partitioning)
+Standard CIS Level 2 partitioning recommends separate logical volumes:
+* `/` (Root) $\rightarrow$ 6 GB+
+* `/tmp` $\rightarrow$ 1 GB (`nodev,nosuid,noexec`)
+* `/var` $\rightarrow$ 3 GB (`nodev`)
+* `/var/log` $\rightarrow$ 2 GB (`nodev,nosuid,noexec`)
+* `/var/log/audit` $\rightarrow$ 1 GB (`nodev,nosuid,noexec`)
+* `/home` $\rightarrow$ 2 GB (`nodev,nosuid`)
+
+---
+
+## 3. Post-Install OS Configuration & Sudo Setup
+
+Log in as `almalinux` and configure the administrative environment:
+
+### 3.1 Configure Passwordless Sudo
+Ansible connects as `almalinux` and uses `become: true` (sudo) to configure Vault:
+
 ```bash
-echo "almalinux ALL=(ALL) NOPASSWD: ALL" > /etc/sudoers.d/almalinux
-chmod 0440 /etc/sudoers.d/almalinux
+echo "almalinux ALL=(ALL) NOPASSWD: ALL" | sudo tee /etc/sudoers.d/almalinux
+sudo chmod 0440 /etc/sudoers.d/almalinux
 ```
 
-### 2.2 Sudoers `requiretty` Check (CIS Level 2)
-* Some CIS Level 2 benchmarks enforce `Defaults requiretty` in `/etc/sudoers`.
-* Ensure `requiretty` is **disabled or absent**; otherwise, Ansible SSH pipelining will fail.
-
-### 2.3 Root & Vault Accounts
-* **Root**: Password should be locked (`passwd -l root` or `rootpw --lock`). Ansible executes all privileged operations via `sudo` from the `almalinux` user.
-* **Vault User**: **Do not pre-create passwords for `vault`.** Ansible automatically creates the dedicated `vault:vault` system user with `/sbin/nologin`.
+### 3.2 Verify Sudoers `requiretty` (CIS Level 2 Check)
+Check if `requiretty` is present in `/etc/sudoers` or `/etc/sudoers.d/`:
+```bash
+sudo grep -ri "requiretty" /etc/sudoers /etc/sudoers.d/ || true
+```
+> **Important**: If `Defaults requiretty` is enabled, comment it out or remove it. Sudoers TTY requirement prevents Ansible SSH pipelining from running.
 
 ---
 
-## 3. Mandatory Packages & Services
+## 4. Install Mandatory Packages & Enable Services
 
-Ensure the following packages are installed and enabled on the template:
+Install the guest agents, Cloud-Init utilities, and firewall tools:
 
 ```bash
 sudo dnf install -y \
@@ -65,7 +94,7 @@ sudo dnf install -y \
   openssh-server
 ```
 
-Enable core startup services:
+Enable all required services:
 ```bash
 sudo systemctl enable qemu-guest-agent
 sudo systemctl enable cloud-init cloud-init-local cloud-config cloud-final
@@ -75,18 +104,20 @@ sudo systemctl enable sshd
 
 ---
 
-## 4. SSH & Security Configurations
+## 5. SSH Configuration (`sshd_config`)
 
-In `/etc/ssh/sshd_config` (or `/etc/ssh/sshd_config.d/cis.conf`):
-* `PubkeyAuthentication yes` (Mandatory for GitLab CI deployment key authentication).
-* `PermitRootLogin no` (CIS Level 2 compliant).
-* If `AllowUsers` or `AllowGroups` is configured, ensure `almalinux` / `wheel` is included.
+Ensure `/etc/ssh/sshd_config` permits public key authentication:
+
+```bash
+# Verify Public Key Authentication is enabled
+sudo grep "^PubkeyAuthentication" /etc/ssh/sshd_config || echo "PubkeyAuthentication yes" | sudo tee -a /etc/ssh/sshd_config.d/vault.conf
+```
 
 ---
 
-## 5. Golden Image Sanitization (Pre-Template Checklist)
+## 6. Golden Image Sanitization (Pre-Template Checklist)
 
-Before converting the VM into a Proxmox template, execute this sanitization script to prevent duplicate machine IDs, SSH host key conflicts, and stale Cloud-Init data:
+Before converting the VM into a Proxmox template, run this sanitization script to ensure cloned VMs do not share duplicate machine IDs, SSH host keys, or stale Cloud-Init caches:
 
 ```bash
 # 1. Clean Cloud-Init state so it runs fresh on each cloned VM
@@ -101,7 +132,7 @@ sudo ln -sf /etc/machine-id /var/lib/dbus/machine-id
 # 3. Remove old SSH host keys (Cloud-Init will generate unique host keys per VM)
 sudo rm -f /etc/ssh/ssh_host_*
 
-# 4. Clean temporary files and package caches
+# 4. Clean temporary files, audit logs, and DNF caches
 sudo dnf clean all
 sudo rm -rf /tmp/* /var/tmp/*
 sudo truncate -s 0 /var/log/audit/audit.log 2>/dev/null || true
@@ -109,9 +140,9 @@ sudo truncate -s 0 /var/log/audit/audit.log 2>/dev/null || true
 
 ---
 
-## 6. Convert to Template
+## 7. Convert to Proxmox Template
 
-1. Power off the VM:
+1. Shut down the template VM:
    ```bash
    sudo poweroff
    ```
@@ -124,16 +155,17 @@ sudo truncate -s 0 /var/log/audit/audit.log 2>/dev/null || true
 
 ---
 
-## 7. Verification Checklist
+## 8. Verification Checklist
 
 ```
 [ ] VM ID is set to 1000 on colossus and guardian
-[ ] QEMU Guest Agent is installed and enabled (systemctl enable qemu-guest-agent)
-[ ] Cloud-Init is installed and enabled
-[ ] almalinux user has NOPASSWD sudo in /etc/sudoers.d/almalinux
+[ ] BIOS is Default (SeaBIOS) and TPM is Disabled
+[ ] Hard Disk has SSD Emulation, Discard, and IO Thread enabled
+[ ] QEMU Guest Agent is enabled in Proxmox Options and systemd
+[ ] Cloud-Init Drive is added to VM hardware
+[ ] almalinux user created with Administrator (wheel) access
+[ ] Passwordless sudo configured in /etc/sudoers.d/almalinux
 [ ] requiretty is NOT enforced in /etc/sudoers
-[ ] PubkeyAuthentication yes is enabled in sshd_config
 [ ] Sanitization script executed (machine-id truncated, ssh_host_* removed)
-[ ] Cloud-Init drive is present on SCSI/IDE bus
-[ ] VM converted to template (qm template 1000)
+[ ] VM successfully converted to template (qm template 1000)
 ```
