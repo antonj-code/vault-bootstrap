@@ -19,7 +19,9 @@ variables:
 # -------------------------------------------------------------------
 terraform:validate:
   stage: validate
-  image: hashicorp/terraform:1.8.5
+  image:
+    name: hashicorp/terraform:1.8.5
+    entrypoint: [""]
   before_script:
     - cd ${TF_ROOT}
     - terraform init -backend=false
@@ -46,7 +48,9 @@ ansible:lint:
 # -------------------------------------------------------------------
 terraform:plan:
   stage: plan
-  image: hashicorp/terraform:1.8.5
+  image:
+    name: hashicorp/terraform:1.8.5
+    entrypoint: [""]
   before_script:
     - cd ${TF_ROOT}
     - terraform init \
@@ -75,7 +79,9 @@ terraform:plan:
 # -------------------------------------------------------------------
 terraform:apply:
   stage: apply
-  image: hashicorp/terraform:1.8.5
+  image:
+    name: hashicorp/terraform:1.8.5
+    entrypoint: [""]
   dependencies:
     - terraform:plan
   before_script:
