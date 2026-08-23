@@ -7,17 +7,10 @@ stages:
 
 variables:
   TF_ROOT: "${CI_PROJECT_DIR}/terraform"
+  TF_ADDRESS: "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/terraform/state/vault-production"
   TF_IN_AUTOMATION: "true"
-  # Standard GitLab-Managed Terraform HTTP State Backend Environment Variables
-  TF_HTTP_ADDRESS: "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/terraform/state/vault-production"
-  TF_HTTP_LOCK_ADDRESS: "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/terraform/state/vault-production/lock"
-  TF_HTTP_LOCK_METHOD: "POST"
-  TF_HTTP_UNLOCK_ADDRESS: "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/terraform/state/vault-production/lock"
-  TF_HTTP_UNLOCK_METHOD: "DELETE"
   TF_HTTP_USERNAME: "gitlab-ci-token"
   TF_HTTP_PASSWORD: "${CI_JOB_TOKEN}"
-  TF_HTTP_RETRY_WAIT_MIN: "5"
-  TF_HTTP_SKIP_CERT_VERIFICATION: "true"
   ANSIBLE_ROOT: "${CI_PROJECT_DIR}/ansible"
   ANSIBLE_CONFIG: "${CI_PROJECT_DIR}/ansible/ansible.cfg"
   ANSIBLE_ROLES_PATH: "${CI_PROJECT_DIR}/ansible/roles"
@@ -71,9 +64,19 @@ terraform:plan:
         "ssh_public_keys": ["${CLEAN_KEY}"]
       }
       EOF
-    - terraform init
+    - |
+      terraform init \
+        -backend-config="address=${TF_ADDRESS}" \
+        -backend-config="lock_address=${TF_ADDRESS}/lock" \
+        -backend-config="unlock_address=${TF_ADDRESS}/lock" \
+        -backend-config="username=gitlab-ci-token" \
+        -backend-config="password=${CI_JOB_TOKEN}" \
+        -backend-config="lock_method=POST" \
+        -backend-config="unlock_method=DELETE" \
+        -backend-config="retry_wait_min=5" \
+        -backend-config="skip_cert_verification=true"
   script:
-    - terraform plan -out=tfplan -input=false
+    - terraform plan -out=tfplan -input=false -lock=false
   artifacts:
     name: "plan-${CI_COMMIT_SHA}"
     paths:
@@ -106,9 +109,19 @@ terraform:apply:
         "ssh_public_keys": ["${CLEAN_KEY}"]
       }
       EOF
-    - terraform init
+    - |
+      terraform init \
+        -backend-config="address=${TF_ADDRESS}" \
+        -backend-config="lock_address=${TF_ADDRESS}/lock" \
+        -backend-config="unlock_address=${TF_ADDRESS}/lock" \
+        -backend-config="username=gitlab-ci-token" \
+        -backend-config="password=${CI_JOB_TOKEN}" \
+        -backend-config="lock_method=POST" \
+        -backend-config="unlock_method=DELETE" \
+        -backend-config="retry_wait_min=5" \
+        -backend-config="skip_cert_verification=true"
   script:
-    - terraform apply -input=false tfplan
+    - terraform apply -input=false -lock=false tfplan
   artifacts:
     name: "inventory-${CI_COMMIT_SHA}"
     paths:
