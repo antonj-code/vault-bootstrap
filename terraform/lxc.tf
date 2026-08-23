@@ -51,7 +51,7 @@ resource "proxmox_virtual_environment_container" "vault_transit" {
 
   operating_system {
     template_file_id = var.lxc_template_path
-    type             = "almalinux"
+    type             = "centos"
   }
 
   unprivileged = true
