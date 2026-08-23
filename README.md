@@ -70,6 +70,7 @@ vault-bootstrap/
 ├── docs/
 │   ├── architecture.md             # Deep-dive architecture and threat model
 │   ├── gitlab-setup.md             # GitLab CI/CD setup guide on gitbox.jnet.lan
+│   ├── template-setup.md           # AlmaLinux 9 CIS Level 2 Proxmox template (ID 1000) setup guide
 │   └── packer-repaving.md          # Weekly automated Packer build & rolling repave guide
 ├── packer/                         # Automated AlmaLinux 9 CIS Level 2 Image Builder
 │   ├── almalinux9-cis.pkr.hcl      # Proxmox ISO Packer template
