@@ -69,12 +69,19 @@ vault-bootstrap/
 ├── README.md                       # Comprehensive operational guide
 ├── docs/
 │   ├── architecture.md             # Deep-dive architecture and threat model
-│   └── gitlab-setup.md             # GitLab CI/CD setup guide on gitbox.jnet.lan
+│   ├── gitlab-setup.md             # GitLab CI/CD setup guide on gitbox.jnet.lan
+│   └── packer-repaving.md          # Weekly automated Packer build & rolling repave guide
+├── packer/                         # Automated AlmaLinux 9 CIS Level 2 Image Builder
+│   ├── almalinux9-cis.pkr.hcl      # Proxmox ISO Packer template
+│   ├── variables.pkr.hcl           # Packer variable definitions
+│   ├── pkrvars.example.hcl         # Sample build variables
+│   ├── http/ks.cfg                 # Automated CIS Kickstart configuration
+│   └── scripts/                    # Hardening and image cleanup provisioners
 ├── terraform/                      # OpenTofu / Terraform Proxmox IaC
 │   ├── versions.tf                 # bpg/proxmox provider & GitLab HTTP backend
 │   ├── variables.tf                # Dual-host endpoints, node configs, credentials
 │   ├── main.tf                     # Standalone provider configurations (proxmox.pve1, proxmox.pve2)
-│   ├── vms.tf                      # 3x Main Vault Raft VMs (Cloud-Init)
+│   ├── vms.tf                      # 3x Main Vault Raft VMs (Cloned from Template 1000)
 │   ├── lxc.tf                      # 1x Transit Auto-Unseal LXC
 │   ├── outputs.tf                  # Outputs & dynamic Ansible inventory generation
 │   └── terraform.tfvars.example    # Sample configuration values
@@ -93,6 +100,7 @@ vault-bootstrap/
 │   │   └── vault_cluster/          # Raft configuration, auto-unseal & auto-join
 │   └── playbooks/
 │       ├── site.yaml               # Master end-to-end bootstrap playbook
+│       ├── rolling_update.yaml     # Zero-downtime rolling repave (Method A)
 │       ├── provision_transit.yaml  # Standalone Transit Vault playbook
 │       └── provision_cluster.yaml  # Standalone Main Cluster playbook
 └── scripts/

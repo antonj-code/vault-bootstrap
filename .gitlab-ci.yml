@@ -1,8 +1,10 @@
 stages:
   - validate
+  - build_image
   - plan
   - apply
   - configure
+  - rolling_repave
   - verify
 
 variables:
@@ -11,6 +13,7 @@ variables:
   TF_IN_AUTOMATION: "true"
   ANSIBLE_ROOT: "${CI_PROJECT_DIR}/ansible"
   ANSIBLE_FORCE_COLOR: "true"
+  PACKER_ROOT: "${CI_PROJECT_DIR}/packer"
 
 default:
   tags:
@@ -39,9 +42,32 @@ ansible:lint:
     - cd ${ANSIBLE_ROOT}
   script:
     - ansible-playbook --syntax-check playbooks/site.yaml
+    - ansible-playbook --syntax-check playbooks/rolling_update.yaml
   rules:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+
+# -------------------------------------------------------------------
+# Stage: Packer Golden Image Build (Manual or Scheduled Weekly)
+# -------------------------------------------------------------------
+packer:build:
+  stage: build_image
+  image: hashicorp/packer:1.10.3
+  before_script:
+    - cd ${PACKER_ROOT}
+    - packer init almalinux9-cis.pkr.hcl
+  script:
+    - |
+      packer build \
+        -var "proxmox_url=${TF_VAR_pve_host_1_endpoint}api2/json" \
+        -var "proxmox_token_id=${TF_VAR_pve_host_1_api_token}" \
+        almalinux9-cis.pkr.hcl
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "schedule"
+      when: always
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+      when: manual
+      allow_failure: true
 
 # -------------------------------------------------------------------
 # Stage: Terraform Plan
@@ -97,10 +123,10 @@ terraform:apply:
       - ${ANSIBLE_ROOT}/inventory/hosts.yaml
     expire_in: 7 days
   rules:
-    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH && $CI_PIPELINE_SOURCE != "schedule"
 
 # -------------------------------------------------------------------
-# Stage: Ansible Configuration Management
+# Stage: Ansible Initial Configuration Management
 # -------------------------------------------------------------------
 ansible:configure:
   stage: configure
@@ -121,7 +147,35 @@ ansible:configure:
       - credentials/
     expire_in: 30 days
   rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH && $CI_PIPELINE_SOURCE != "schedule"
+
+# -------------------------------------------------------------------
+# Stage: Zero-Downtime Rolling Repave (Method A)
+# -------------------------------------------------------------------
+ansible:rolling_repave:
+  stage: rolling_repave
+  image: alpine/ansible:latest
+  before_script:
+    - apk add --no-cache openssh-client openssl jq curl
+    - eval $(ssh-agent -s)
+    - echo "$SSH_PRIVATE_KEY" | tr -d '\r' | ssh-add -
+    - mkdir -p ~/.ssh
+    - chmod 700 ~/.ssh
+    - echo -e "Host *\n\tStrictHostKeyChecking no\n\n" > ~/.ssh/config
+    - cd ${ANSIBLE_ROOT}
+  script:
+    - ansible-playbook -i inventory/hosts.yaml playbooks/rolling_update.yaml
+  artifacts:
+    name: "vault-backup-${CI_COMMIT_SHA}"
+    paths:
+      - credentials/backups/
+    expire_in: 30 days
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "schedule"
+      when: always
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+      when: manual
+      allow_failure: true
 
 # -------------------------------------------------------------------
 # Stage: Verification & Cluster Health
