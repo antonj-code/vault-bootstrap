@@ -76,6 +76,10 @@ sda                           8:0    0   64G  0 disk
   └─almalinux-tmp           253:7    0    4G  0 lvm  /tmp
 ```
 
+### 2.5 KDUMP (Kernel Crash Dump)
+* **KDUMP**: **`Disabled`**
+* **Why**: Reclaims ~128 MB – 256 MB of RAM (preventing `crashkernel` memory reservations) and aligns with CIS Level 2 memory protection standards (prevents unencrypted kernel memory/keys from dumping to disk during crashes).
+
 ---
 
 ## 3. Post-Install OS Configuration & Sudo Setup
