@@ -53,7 +53,8 @@ terraform:plan:
     entrypoint: [""]
   before_script:
     - cd ${TF_ROOT}
-    - terraform init \
+    - |
+      terraform init \
         -backend-config="address=${TF_ADDRESS}" \
         -backend-config="lock_address=${TF_ADDRESS}/lock" \
         -backend-config="unlock_address=${TF_ADDRESS}/lock" \
@@ -86,7 +87,8 @@ terraform:apply:
     - terraform:plan
   before_script:
     - cd ${TF_ROOT}
-    - terraform init \
+    - |
+      terraform init \
         -backend-config="address=${TF_ADDRESS}" \
         -backend-config="lock_address=${TF_ADDRESS}/lock" \
         -backend-config="unlock_address=${TF_ADDRESS}/lock" \
