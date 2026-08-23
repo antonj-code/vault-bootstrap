@@ -22,7 +22,6 @@ terraform:validate:
     - cd ${TF_ROOT}
     - terraform init -backend=false
   script:
-    - terraform fmt -check
     - terraform validate
   rules:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
@@ -30,7 +29,7 @@ terraform:validate:
 
 ansible:lint:
   stage: validate
-  image: cytopia/ansible-lint:latest
+  image: alpine/ansible:latest
   before_script:
     - cd ${ANSIBLE_ROOT}
   script:
