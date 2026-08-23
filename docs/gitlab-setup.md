@@ -12,7 +12,7 @@ Because **`colossus`** and **`guardian`** are independent, standalone hosts (not
 
 ```bash
 # 1. Create a dedicated role with required VM/LXC and storage privileges
-pveum role add TerraformAdmin -privs "VM.Allocate VM.Clone VM.Config.CDROM VM.Config.CPU VM.Config.Disk VM.Config.HWType VM.Config.Memory VM.Config.Network VM.Config.Options VM.Audit VM.PowerMgmt VM.Monitor Datastore.AllocateSpace Datastore.Audit SDN.Use"
+pveum role add TerraformAdmin -privs "VM.Allocate VM.Clone VM.Config.CDROM VM.Config.CPU VM.Config.Disk VM.Config.HWType VM.Config.Memory VM.Config.Network VM.Config.Options VM.Config.Cloudinit VM.Audit VM.PowerMgmt VM.Console Datastore.AllocateSpace Datastore.AllocateTemplate Datastore.Audit SDN.Use Sys.Audit"
 
 # 2. Create the automation service user
 pveum user add terraform-ci@pve -comment "GitLab CI Terraform Automation"
