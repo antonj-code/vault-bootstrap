@@ -80,6 +80,14 @@ sda                           8:0    0   64G  0 disk
 * **KDUMP**: **`Disabled`**
 * **Why**: Reclaims ~128 MB – 256 MB of RAM (preventing `crashkernel` memory reservations) and aligns with CIS Level 2 memory protection standards (prevents unencrypted kernel memory/keys from dumping to disk during crashes).
 
+### 2.6 Network, Host Name & IPv6 Configuration
+* **Host Name**: Set to **`almalinux9-template.jnet.lan`** (or short name `almalinux9-template`). Cloud-Init will automatically overwrite this with each VM's production hostname on first boot.
+* **IPv6 Configuration**: Click **Configure...** $\rightarrow$ **IPv6 Settings** $\rightarrow$ **Method**: **`Disabled`** (or `Ignore`).
+* **Why Disable IPv6**:
+  1. **CIS Benchmark Level 2 (Section 3.1.1)**: Mandates disabling IPv6 if not actively utilized in the environment.
+  2. **Eliminates DNS Latency**: Prevents dual-stack `AAAA` DNS query timeouts on package updates or API calls.
+  3. **Reduces Attack Surface**: Neutralizes rogue DHCPv6 and Router Advertisement (RA) spoofing risks.
+
 ---
 
 ## 3. Post-Install OS Configuration & Sudo Setup
