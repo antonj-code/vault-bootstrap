@@ -164,7 +164,7 @@ sudo rm -rf /var/lib/cloud/instances/*
 
 # 2. Reset Machine ID (Prevents duplicate D-Bus IDs & DHCP collisions)
 sudo truncate -s 0 /etc/machine-id
-sudo rm -f /var/lib/dbus/machine-id
+sudo mkdir -p /var/lib/dbus
 sudo ln -sf /etc/machine-id /var/lib/dbus/machine-id
 
 # 3. Remove old SSH host keys (Cloud-Init will generate unique host keys per VM)

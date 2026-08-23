@@ -13,7 +13,7 @@ rm -rf /var/lib/cloud/instances/*
 
 # Clean Machine ID so cloned VMs generate unique IDs and MAC/DHCP leases
 truncate -s 0 /etc/machine-id
-rm -f /var/lib/dbus/machine-id
+mkdir -p /var/lib/dbus
 ln -sf /etc/machine-id /var/lib/dbus/machine-id
 
 # Clean temporary SSH keys and logs
