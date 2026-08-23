@@ -32,7 +32,7 @@ ci_user        = "almalinux"
 vault_vm_config = {
   cores     = 2
   memory    = 4096
-  disk_size = 64
+  disk_size = 32
 }
 
 vault_lxc_config = {
