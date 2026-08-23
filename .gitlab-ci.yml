@@ -34,6 +34,7 @@ ansible:lint:
   image: alpine/ansible:latest
   before_script:
     - cd ${ANSIBLE_ROOT}
+    - ansible-galaxy collection install -r requirements.yaml || true
   script:
     - ansible-playbook --syntax-check playbooks/site.yaml
   rules:
@@ -114,6 +115,7 @@ ansible:configure:
     - chmod 700 ~/.ssh
     - echo -e "Host *\n\tStrictHostKeyChecking no\n\n" > ~/.ssh/config
     - cd ${ANSIBLE_ROOT}
+    - ansible-galaxy collection install -r requirements.yaml || true
   script:
     - ansible-playbook -i inventory/hosts.yaml playbooks/site.yaml
   artifacts:
