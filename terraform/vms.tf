@@ -15,7 +15,6 @@ resource "proxmox_virtual_environment_vm" "vault_nodes_host1" {
 
   clone {
     vm_id = var.template_vm_id
-    full  = true
   }
 
   cpu {
@@ -88,7 +87,6 @@ resource "proxmox_virtual_environment_vm" "vault_nodes_host2" {
 
   clone {
     vm_id = var.template_vm_id
-    full  = true
   }
 
   cpu {
