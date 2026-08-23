@@ -17,7 +17,7 @@ When creating the base VM in the Proxmox Web UI before converting it to a templa
 | **CPU** | **2 Cores**, Type: **`host`** | Direct CPU flag pass-through (enables hardware AES-NI encryption). |
 | **Memory** | **2048 MB** | Minimal footprint for base template; Terraform resizes VMs to 4096 MB. |
 | **SCSI Controller** | **`VirtIO SCSI single`** | Dedicated I/O queue per disk; enables TRIM/Discard. |
-| **Hard Disk (`scsi0`)** | **20 GB**, Bus: `SCSI 0` | Paravirtualized VirtIO drive. |
+| **Hard Disk (`scsi0`)** | **64 GB**, Bus: `SCSI 0` | Paravirtualized VirtIO drive (matches CIS Level 2 storage requirements). |
 | **SSD Emulation** | **`Checked (Yes)`** | Disables spinning-disk scheduler; enables multi-queue SSD scheduling for fast Raft writes. |
 | **Discard** | **`Checked (Yes)`** | Returns freed blocks to Proxmox thin storage (`local-lvm`/`local-zfs`). |
 | **IO Thread** | **`Checked (Yes)`** | Dedicates an emulated thread for disk I/O to maximize throughput. |
@@ -31,24 +31,50 @@ When creating the base VM in the Proxmox Web UI before converting it to a templa
 
 When booting from the AlmaLinux 9 ISO:
 
-### 2.1 User Creation Screen
+### 2.1 Software Selection & Security Profile
+* **Software Selection**: **`Minimal Install`** (keeps attack surface minimal).
+* **Security Profile**: Select **`CIS AlmaLinux OS 9 Benchmark for Level 2 - Server`**.
+
+### 2.2 User Creation Screen
 * **Full Name**: `AlmaLinux Admin`
 * **User Name**: **`almalinux`**
 * **Make this user administrator**: **`Checked (Yes)`** *(Adds user to `wheel` group)*
-* **Password**: Set a temporary password (e.g. `TempPass123!`). Cloud-Init will lock down password auth on cloned VMs and enforce SSH keys.
+* **Password**: Set a temporary password (e.g. `TempPass123!`). Cloud-Init will enforce SSH public keys on cloned VMs.
 
-### 2.2 Root Password Screen
+### 2.3 Root Password Screen
 * Set **Root Password** or click **Lock root account** (recommended for CIS Level 2).
 * All administrative tasks will be executed via `sudo` from the `almalinux` user.
 
-### 2.3 Installation Destination (CIS Level 2 Partitioning)
-Standard CIS Level 2 partitioning recommends separate logical volumes:
-* `/` (Root) $\rightarrow$ 6 GB+
-* `/tmp` $\rightarrow$ 1 GB (`nodev,nosuid,noexec`)
-* `/var` $\rightarrow$ 3 GB (`nodev`)
-* `/var/log` $\rightarrow$ 2 GB (`nodev,nosuid,noexec`)
-* `/var/log/audit` $\rightarrow$ 1 GB (`nodev,nosuid,noexec`)
-* `/home` $\rightarrow$ 2 GB (`nodev,nosuid`)
+### 2.4 Installation Destination (64 GB CIS Level 2 Partitioning)
+Under **Manual Partitioning (LVM)**, configure the 64 GB disk as follows:
+
+| Mount Point | Volume / Device | Size | Filesystem | Mount Options (CIS Benchmark) |
+|---|---|---|---|---|
+| `/boot` | Standard Partition (`sda1`) | `1 GB` | `xfs` | default |
+| `/` | LVM `almalinux-root` | `15 GB` | `xfs` | default |
+| `[SWAP]` | LVM `almalinux-swap` | `2 GB` | `swap` | default |
+| `/var` | LVM `almalinux-var` | `15 GB` | `xfs` | `nodev` |
+| `/var/tmp` | LVM `almalinux-var_tmp` | `4 GB` | `xfs` | `nodev,nosuid,noexec` |
+| `/var/log` | LVM `almalinux-var_log` | `9 GB` | `xfs` | `nodev,nosuid,noexec` |
+| `/home` | LVM `almalinux-home` | `5 GB` | `xfs` | `nodev,nosuid` |
+| `/var/log/audit` | LVM `almalinux-var_log_audit` | `9 GB` | `xfs` | `nodev,nosuid,noexec` |
+| `/tmp` | LVM `almalinux-tmp` | `4 GB` | `xfs` | `nodev,nosuid,noexec` |
+
+#### Resulting `lsblk` Layout on Installed VM:
+```
+NAME                        MAJ:MIN RM  SIZE RO TYPE MOUNTPOINTS
+sda                           8:0    0   64G  0 disk 
+├─sda1                        8:1    0    1G  0 part /boot
+└─sda2                        8:2    0   63G  0 part 
+  ├─almalinux-root          253:0    0   15G  0 lvm  /
+  ├─almalinux-swap          253:1    0    2G  0 lvm  [SWAP]
+  ├─almalinux-var           253:2    0   15G  0 lvm  /var
+  ├─almalinux-var_tmp       253:3    0    4G  0 lvm  /var/tmp
+  ├─almalinux-var_log       253:4    0    9G  0 lvm  /var/log
+  ├─almalinux-home          253:5    0    5G  0 lvm  /home
+  ├─almalinux-var_log_audit 253:6    0    9G  0 lvm  /var/log/audit
+  └─almalinux-tmp           253:7    0    4G  0 lvm  /tmp
+```
 
 ---
 

@@ -30,7 +30,7 @@ source "proxmox-iso" "almalinux9_cis" {
   scsi_controller = "virtio-scsi-single"
 
   disks {
-    disk_size    = "20G"
+    disk_size    = "64G"
     format       = "raw"
     storage_pool = var.storage_pool
     type         = "scsi"

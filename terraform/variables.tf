@@ -100,7 +100,7 @@ variable "vault_vm_config" {
   default = {
     cores     = 2
     memory    = 4096
-    disk_size = 32
+    disk_size = 64
   }
 }
 
