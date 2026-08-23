@@ -10,6 +10,8 @@ variables:
   TF_ADDRESS: "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/terraform/state/vault-production"
   TF_IN_AUTOMATION: "true"
   ANSIBLE_ROOT: "${CI_PROJECT_DIR}/ansible"
+  ANSIBLE_CONFIG: "${CI_PROJECT_DIR}/ansible/ansible.cfg"
+  ANSIBLE_ROLES_PATH: "${CI_PROJECT_DIR}/ansible/roles"
   ANSIBLE_FORCE_COLOR: "true"
 
 # -------------------------------------------------------------------
