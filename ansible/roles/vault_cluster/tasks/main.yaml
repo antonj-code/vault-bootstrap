@@ -85,7 +85,7 @@
   register: cluster_leader_status
   retries: 12
   delay: 3
-  until: cluster_leader_status.status == 200 and cluster_leader_status.json.is_self | default(false)
+  until: cluster_leader_status.status == 200 and ((cluster_leader_status.json.leader_address | default('') | length > 0) or (cluster_leader_status.json.is_self | default(false)))
 
 - name: Validate Raft cluster peer membership if root token is available
   when: inventory_hostname == vault_primary_node and (cluster_creds_stat.stat.exists | default(false))

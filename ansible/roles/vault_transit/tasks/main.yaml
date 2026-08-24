@@ -139,28 +139,42 @@
   become: false
   register: existing_unseal_token_file
 
-- name: Recover Auto-Unseal token from primary cluster node if present
+- name: Recover Auto-Unseal token from surviving cluster node if present
   when: transit_init_check.json.initialized and not (existing_unseal_token_file.stat.exists | default(false))
   block:
-    - name: Check if vault.hcl exists on primary node
+    - name: Identify surviving cluster node with valid configuration
+      ansible.builtin.set_fact:
+        cluster_survivor_host: >-
+          {{
+            (groups['vault_cluster']
+            | map('extract', hostvars)
+            | selectattr('is_vault_bootstrapped', 'defined')
+            | selectattr('is_vault_bootstrapped', 'equalto', true)
+            | map(attribute='inventory_hostname')
+            | list
+            | first)
+            | default(vault_primary_node)
+          }}
+
+    - name: Check if vault.hcl exists on surviving cluster node
       ansible.builtin.stat:
         path: "{{ vault_config_dir }}/vault.hcl"
-      delegate_to: "{{ vault_primary_node }}"
-      register: primary_vault_hcl_stat
+      delegate_to: "{{ cluster_survivor_host }}"
+      register: survivor_vault_hcl_stat
       ignore_errors: true
 
-    - name: Slurp primary vault.hcl and extract token
-      when: primary_vault_hcl_stat.stat.exists | default(false)
+    - name: Slurp surviving node vault.hcl and extract token
+      when: survivor_vault_hcl_stat.stat.exists | default(false)
       block:
-        - name: Read vault.hcl on primary node
+        - name: Read vault.hcl on surviving node
           ansible.builtin.slurp:
             src: "{{ vault_config_dir }}/vault.hcl"
-          delegate_to: "{{ vault_primary_node }}"
-          register: slurped_primary_vault_hcl
+          delegate_to: "{{ cluster_survivor_host }}"
+          register: slurped_survivor_vault_hcl
 
         - name: Extract token regex
           ansible.builtin.set_fact:
-            extracted_unseal_token: "{{ (slurped_primary_vault_hcl.content | b64decode) | regex_search('token\\s*=\\s*\"([^\"]+)\"', '\\1') | first }}"
+            extracted_unseal_token: "{{ (slurped_survivor_vault_hcl.content | b64decode) | regex_search('token\\s*=\\s*\"([^\"]+)\"', '\\1') | first }}"
 
         - name: Write extracted Auto-Unseal token to control node
           ansible.builtin.copy:
