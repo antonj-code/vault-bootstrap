@@ -159,7 +159,7 @@
     - name: Check if vault.hcl exists on surviving cluster node
       ansible.builtin.stat:
         path: "{{ vault_config_dir }}/vault.hcl"
-      delegate_to: "{{ cluster_survivor_host }}"
+      delegate_to: "{{ cluster_survivor_host | default(vault_primary_node | default('vm-vault-01')) }}"
       register: survivor_vault_hcl_stat
       ignore_errors: true
 
@@ -169,7 +169,7 @@
         - name: Read vault.hcl on surviving node
           ansible.builtin.slurp:
             src: "{{ vault_config_dir }}/vault.hcl"
-          delegate_to: "{{ cluster_survivor_host }}"
+          delegate_to: "{{ cluster_survivor_host | default(vault_primary_node | default('vm-vault-01')) }}"
           register: slurped_survivor_vault_hcl
 
         - name: Extract token regex

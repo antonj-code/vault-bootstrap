@@ -13,3 +13,5 @@ transit_key_type: "aes256-gcm96"
 
 # Memory locking
 vault_disable_mlock: false
+
+cluster_survivor_host: "vm-vault-01"
