@@ -65,6 +65,14 @@
       delegate_to: localhost
       become: false
 
+    - name: Save Transit unseal key locally on Transit node
+      ansible.builtin.copy:
+        content: "{{ (transit_init_raw.stdout | from_json).unseal_keys_b64[0] }}"
+        dest: "{{ vault_config_dir }}/transit.key"
+        owner: "{{ vault_user }}"
+        group: "{{ vault_group }}"
+        mode: '0600'
+
     - name: Unseal Transit Vault
       ansible.builtin.command:
         cmd: "{{ vault_bin }} operator unseal {{ (transit_init_raw.stdout | from_json).unseal_keys_b64[0] }}"
@@ -166,15 +174,36 @@
 - name: Unseal Transit Vault if sealed
   when: transit_init_check.json.initialized and (transit_seal_check.json.sealed | default(false))
   block:
+    - name: Check if local transit.key exists on node
+      ansible.builtin.stat:
+        path: "{{ vault_config_dir }}/transit.key"
+      register: local_transit_key_stat
+
+    - name: Unseal Transit from local key if present
+      when: local_transit_key_stat.stat.exists
+      block:
+        - name: Read local transit.key
+          ansible.builtin.slurp:
+            src: "{{ vault_config_dir }}/transit.key"
+          register: slurped_local_transit_key
+
+        - name: Unseal Transit Vault via local key
+          ansible.builtin.command:
+            cmd: "{{ vault_bin }} operator unseal {{ slurped_local_transit_key.content | b64decode | trim }}"
+          environment:
+            VAULT_ADDR: "https://127.0.0.1:{{ vault_api_port }}"
+            VAULT_CACERT: "{{ vault_tls_dir }}/ca.crt"
+
     - name: Check if transit credentials exist on control node
       ansible.builtin.stat:
         path: "{{ vault_local_credentials_dir }}/transit_credentials.json"
       delegate_to: localhost
       become: false
       register: transit_creds_stat
+      when: not local_transit_key_stat.stat.exists
 
-    - name: Unseal Transit using stored credentials
-      when: transit_creds_stat.stat.exists
+    - name: Unseal Transit using stored control node credentials
+      when: not local_transit_key_stat.stat.exists and (transit_creds_stat.stat.exists | default(false))
       block:
         - name: Fetch stored Transit credentials
           ansible.builtin.slurp:
@@ -189,3 +218,30 @@
           environment:
             VAULT_ADDR: "https://127.0.0.1:{{ vault_api_port }}"
             VAULT_CACERT: "{{ vault_tls_dir }}/ca.crt"
+
+- name: Deploy automatic unseal systemd service on Transit node
+  ansible.builtin.copy:
+    dest: /etc/systemd/system/vault-transit-unseal.service
+    content: |
+      [Unit]
+      Description=Auto-unseal Transit Vault on Boot
+      After=vault.service
+      Requires=vault.service
+
+      [Service]
+      Type=oneshot
+      ExecStart=/bin/bash -c "sleep 2; if [ -f {{ vault_config_dir }}/transit.key ]; then {{ vault_bin }} operator unseal -address=https://127.0.0.1:{{ vault_api_port }} -ca-cert={{ vault_tls_dir }}/ca.crt $(cat {{ vault_config_dir }}/transit.key) || true; fi"
+      RemainAfterExit=true
+
+      [Install]
+      WantedBy=multi-user.target
+    owner: root
+    group: root
+    mode: '0644'
+  notify: Reload systemd daemon
+
+- name: Enable vault-transit-unseal systemd service
+  ansible.builtin.systemd:
+    name: vault-transit-unseal
+    enabled: true
+    state: started
