@@ -5,6 +5,6 @@ vault_user: "vault"
 vault_group: "vault"
 vault_primary_node: "vm-vault-01"
 
-pki_ca_subject: "/C=US/ST=State/L=City/O=Infrastructure/OU=Security/CN=Vault-Internal-Root-CA"
+pki_ca_subject: "/C=US/O=JNET-Labs/OU=Vault-Control/CN=JNET-Vault-Root-CA"
 pki_cert_validity_days: 365
 pki_ca_validity_days: 3650

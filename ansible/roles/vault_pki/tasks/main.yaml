@@ -116,19 +116,18 @@
 
           [dn]
           C = US
-          ST = State
-          L = City
-          O = Infrastructure
-          OU = Security
-          CN = {{ inventory_hostname }}
+          O = JNET-Labs
+          OU = Vault-Control
+          CN = {{ inventory_hostname }}.jnet.lan
 
           [req_ext]
           subjectAltName = @alt_names
 
           [alt_names]
           DNS.1 = {{ inventory_hostname }}
-          DNS.2 = localhost
-          DNS.3 = vault.internal
+          DNS.2 = {{ inventory_hostname }}.jnet.lan
+          DNS.3 = vault.jnet.lan
+          DNS.4 = localhost
           IP.1 = 127.0.0.1
           IP.2 = {{ ansible_host }}
       delegate_to: localhost

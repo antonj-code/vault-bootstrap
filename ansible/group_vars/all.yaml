@@ -18,6 +18,6 @@ vault_bootstrap_marker: "{{ vault_config_dir }}/.vault_bootstrapped"
 vault_local_credentials_dir: "{{ lookup('env', 'CI_PROJECT_DIR') | default(playbook_dir ~ '/..', true) }}/credentials"
 
 # PKI Configuration
-pki_ca_subject: "/C=US/ST=State/L=City/O=Infrastructure/OU=Security/CN=Vault-Internal-Root-CA"
+pki_ca_subject: "/C=US/O=JNET-Labs/OU=Vault-Control/CN=JNET-Vault-Root-CA"
 pki_cert_validity_days: 365
 pki_ca_validity_days: 3650
