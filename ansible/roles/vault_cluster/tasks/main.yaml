@@ -46,7 +46,7 @@
     - name: Initialize Main Vault cluster
       when: not primary_init_check.json.initialized
       ansible.builtin.command:
-        cmd: "vault operator init -recovery-shares={{ vault_recovery_shares }} -recovery-threshold={{ vault_recovery_threshold }} -format=json"
+        cmd: "{{ vault_bin }} operator init -recovery-shares={{ vault_recovery_shares }} -recovery-threshold={{ vault_recovery_threshold }} -format=json"
       environment:
         VAULT_ADDR: "https://127.0.0.1:{{ vault_api_port }}"
         VAULT_CACERT: "{{ vault_tls_dir }}/ca.crt"
@@ -75,7 +75,7 @@
 
     - name: Query Raft cluster peer list
       ansible.builtin.command:
-        cmd: "vault operator raft list-peers -format=json"
+        cmd: "{{ vault_bin }} operator raft list-peers -format=json"
       environment:
         VAULT_ADDR: "https://127.0.0.1:{{ vault_api_port }}"
         VAULT_CACERT: "{{ vault_tls_dir }}/ca.crt"

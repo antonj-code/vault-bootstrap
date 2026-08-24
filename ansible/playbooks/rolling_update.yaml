@@ -14,7 +14,7 @@
 
     - name: Verify cluster health and quorum before repaving
       ansible.builtin.command:
-        cmd: "vault operator raft list-peers -format=json"
+        cmd: "{{ vault_bin }} operator raft list-peers -format=json"
       environment:
         VAULT_ADDR: "https://127.0.0.1:{{ vault_api_port }}"
         VAULT_CACERT: "{{ vault_tls_dir }}/ca.crt"
@@ -25,7 +25,7 @@
 
     - name: Take pre-repave automated Raft backup snapshot
       ansible.builtin.command:
-        cmd: "vault operator raft snapshot save /tmp/pre-repave.snap"
+        cmd: "{{ vault_bin }} operator raft snapshot save /tmp/pre-repave.snap"
       environment:
         VAULT_ADDR: "https://127.0.0.1:{{ vault_api_port }}"
         VAULT_CACERT: "{{ vault_tls_dir }}/ca.crt"
@@ -57,7 +57,7 @@
   post_tasks:
     - name: Step down if node is currently the active leader
       ansible.builtin.command:
-        cmd: "vault operator step-down"
+        cmd: "{{ vault_bin }} operator step-down"
       environment:
         VAULT_ADDR: "https://127.0.0.1:{{ vault_api_port }}"
         VAULT_CACERT: "{{ vault_tls_dir }}/ca.crt"
@@ -79,20 +79,20 @@
         timeout: 45
 
     - name: Wait for node to auto-unseal via Transit and sync Raft log
-      ansible.builtin.command:
-        cmd: "vault status -format=json"
-      environment:
-        VAULT_ADDR: "https://127.0.0.1:{{ vault_api_port }}"
-        VAULT_CACERT: "{{ vault_tls_dir }}/ca.crt"
+      ansible.builtin.uri:
+        url: "https://127.0.0.1:{{ vault_api_port }}/v1/sys/health"
+        ca_path: "{{ vault_tls_dir }}/ca.crt"
+        method: GET
+        status_code: [200, 429, 472, 473]
+        return_content: true
       register: node_status_raw
-      retries: 12
+      retries: 15
       delay: 5
-      until: (node_status_raw.stdout | from_json).sealed == false
-      changed_when: false
+      until: node_status_raw.status in [200, 429] and not node_status_raw.json.sealed
 
     - name: Verify full 3-node Raft consensus health before proceeding to next node
       ansible.builtin.command:
-        cmd: "vault operator raft list-peers -format=json"
+        cmd: "{{ vault_bin }} operator raft list-peers -format=json"
       environment:
         VAULT_ADDR: "https://127.0.0.1:{{ vault_api_port }}"
         VAULT_CACERT: "{{ vault_tls_dir }}/ca.crt"
@@ -115,15 +115,14 @@
   gather_facts: false
   tasks:
     - name: Query health status
-      ansible.builtin.command:
-        cmd: "vault status -format=json"
-      environment:
-        VAULT_ADDR: "https://127.0.0.1:{{ vault_api_port }}"
-        VAULT_CACERT: "{{ vault_tls_dir }}/ca.crt"
+      ansible.builtin.uri:
+        url: "https://127.0.0.1:{{ vault_api_port }}/v1/sys/health"
+        ca_path: "{{ vault_tls_dir }}/ca.crt"
+        method: GET
+        status_code: [200, 429, 472, 473]
+        return_content: true
       register: final_status_raw
-      failed_when: final_status_raw.rc not in [0, 2]
-      changed_when: false
 
     - name: Output summary
       ansible.builtin.debug:
-        msg: "Repave Complete: {{ inventory_hostname }} is Sealed={{ (final_status_raw.stdout | from_json).sealed }}"
+        msg: "Repave Complete: {{ inventory_hostname }} is Sealed={{ final_status_raw.json.sealed }}"

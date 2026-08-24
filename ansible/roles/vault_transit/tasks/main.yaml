@@ -51,7 +51,7 @@
   block:
     - name: Run operator init on Transit Vault
       ansible.builtin.command:
-        cmd: "vault operator init -key-shares={{ transit_key_shares }} -key-threshold={{ transit_key_threshold }} -format=json"
+        cmd: "{{ vault_bin }} operator init -key-shares={{ transit_key_shares }} -key-threshold={{ transit_key_threshold }} -format=json"
       environment:
         VAULT_ADDR: "https://127.0.0.1:{{ vault_api_port }}"
         VAULT_CACERT: "{{ vault_tls_dir }}/ca.crt"
@@ -67,7 +67,7 @@
 
     - name: Unseal Transit Vault
       ansible.builtin.command:
-        cmd: "vault operator unseal {{ (transit_init_raw.stdout | from_json).unseal_keys_b64[0] }}"
+        cmd: "{{ vault_bin }} operator unseal {{ (transit_init_raw.stdout | from_json).unseal_keys_b64[0] }}"
       environment:
         VAULT_ADDR: "https://127.0.0.1:{{ vault_api_port }}"
         VAULT_CACERT: "{{ vault_tls_dir }}/ca.crt"
@@ -84,7 +84,7 @@
 
     - name: Unseal Transit Vault if sealed
       ansible.builtin.command:
-        cmd: "vault operator unseal {{ (stored_transit_creds.content | b64decode | from_json).unseal_keys_b64[0] }}"
+        cmd: "{{ vault_bin }} operator unseal {{ (stored_transit_creds.content | b64decode | from_json).unseal_keys_b64[0] }}"
       environment:
         VAULT_ADDR: "https://127.0.0.1:{{ vault_api_port }}"
         VAULT_CACERT: "{{ vault_tls_dir }}/ca.crt"
@@ -96,7 +96,7 @@
 
 - name: Check enabled secrets engines on Transit Vault
   ansible.builtin.command:
-    cmd: "vault secrets list -format=json"
+    cmd: "{{ vault_bin }} secrets list -format=json"
   environment:
     VAULT_ADDR: "https://127.0.0.1:{{ vault_api_port }}"
     VAULT_CACERT: "{{ vault_tls_dir }}/ca.crt"
@@ -106,7 +106,7 @@
 
 - name: Enable Transit secrets engine
   ansible.builtin.command:
-    cmd: "vault secrets enable -path=transit transit"
+    cmd: "{{ vault_bin }} secrets enable -path=transit transit"
   environment:
     VAULT_ADDR: "https://127.0.0.1:{{ vault_api_port }}"
     VAULT_CACERT: "{{ vault_tls_dir }}/ca.crt"
@@ -115,7 +115,7 @@
 
 - name: Create or verify Transit unseal key
   ansible.builtin.command:
-    cmd: "vault write -f transit/keys/{{ transit_key_name }} type={{ transit_key_type }}"
+    cmd: "{{ vault_bin }} write -f transit/keys/{{ transit_key_name }} type={{ transit_key_type }}"
   environment:
     VAULT_ADDR: "https://127.0.0.1:{{ vault_api_port }}"
     VAULT_CACERT: "{{ vault_tls_dir }}/ca.crt"
@@ -125,7 +125,7 @@
 
 - name: Write autounseal policy for Main Cluster
   ansible.builtin.shell: |
-    vault policy write autounseal - <<'EOF'
+    {{ vault_bin }} policy write autounseal - <<'EOF'
     path "transit/encrypt/{{ transit_key_name }}" {
       capabilities = ["update"]
     }
@@ -140,7 +140,7 @@
 
 - name: Generate Auto-Unseal client token for Main Cluster
   ansible.builtin.command:
-    cmd: "vault token create -orphan -policy=autounseal -period=768h -format=json"
+    cmd: "{{ vault_bin }} token create -orphan -policy=autounseal -period=768h -format=json"
   environment:
     VAULT_ADDR: "https://127.0.0.1:{{ vault_api_port }}"
     VAULT_CACERT: "{{ vault_tls_dir }}/ca.crt"

@@ -126,6 +126,13 @@
         path: "/tmp/vault_{{ vault_version }}_linux_amd64.zip"
         state: absent
 
+- name: Ensure symlink exists in /usr/bin/vault for standard PATH resolution
+  ansible.builtin.file:
+    src: "/usr/local/bin/vault"
+    dest: "/usr/bin/vault"
+    state: link
+    force: true
+
 # --- SELinux & Linux Capabilities Hardening ---
 - name: Configure SELinux file contexts on RedHat / AlmaLinux
   when: ansible_facts['os_family'] == 'RedHat' and ansible_facts['virtualization_type'] != 'lxc'
