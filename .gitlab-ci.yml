@@ -35,7 +35,7 @@ terraform:validate:
 
 ansible:validate:
   stage: validate
-  image: alpine/ansible:latest
+  image: alpine/ansible:2.21.0
   before_script:
     - cd ${ANSIBLE_ROOT}
     - ansible-galaxy collection install -r requirements.yaml || true
@@ -135,7 +135,7 @@ terraform:apply:
 # -------------------------------------------------------------------
 ansible:configure:
   stage: configure
-  image: alpine/ansible:latest
+  image: alpine/ansible:2.21.0
   dependencies:
     - terraform:apply
   before_script:
