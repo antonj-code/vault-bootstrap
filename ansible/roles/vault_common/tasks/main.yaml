@@ -15,7 +15,7 @@
       - policycoreutils-python-utils
       - firewalld
     state: present
-  when: ansible_os_family == 'RedHat'
+  when: ansible_facts['os_family'] == 'RedHat'
 
 - name: Install dependencies on Debian / Ubuntu family
   ansible.builtin.apt:
@@ -33,7 +33,7 @@
       - procps
       - sudo
     state: present
-  when: ansible_os_family == 'Debian'
+  when: ansible_facts['os_family'] == 'Debian'
 
 # --- Firewall Configuration (AlmaLinux / RHEL with CIS Benchmark) ---
 - name: Ensure firewalld is started and enabled
@@ -41,7 +41,7 @@
     name: firewalld
     state: started
     enabled: true
-  when: ansible_os_family == 'RedHat' and ansible_virtualization_type != 'lxc'
+  when: ansible_facts['os_family'] == 'RedHat' and ansible_facts['virtualization_type'] != 'lxc'
 
 - name: Open Vault API and Cluster ports in firewalld
   ansible.posix.firewalld:
@@ -52,7 +52,7 @@
   loop:
     - "{{ vault_api_port }}/tcp"
     - "{{ vault_cluster_port }}/tcp"
-  when: ansible_os_family == 'RedHat' and ansible_virtualization_type != 'lxc'
+  when: ansible_facts['os_family'] == 'RedHat' and ansible_facts['virtualization_type'] != 'lxc'
 
 # --- Kernel & Sysctl Hardening ---
 - name: Configure sysctl optimizations for Vault
@@ -65,7 +65,7 @@
     - { name: 'vm.swappiness', value: '1' }
     - { name: 'vm.max_map_count', value: '262144' }
     - { name: 'net.core.somaxconn', value: '4096' }
-  when: ansible_virtualization_type != 'lxc'
+  when: ansible_facts['virtualization_type'] != 'lxc'
 
 # --- Vault User & Directory Layout ---
 - name: Create vault system group
@@ -128,7 +128,7 @@
 
 # --- SELinux & Linux Capabilities Hardening ---
 - name: Configure SELinux file contexts on RedHat / AlmaLinux
-  when: ansible_os_family == 'RedHat' and ansible_virtualization_type != 'lxc'
+  when: ansible_facts['os_family'] == 'RedHat' and ansible_facts['virtualization_type'] != 'lxc'
   block:
     - name: Set SELinux file context for /usr/local/bin/vault
       community.general.sefcontext:
@@ -152,7 +152,7 @@
     path: "/usr/local/bin/vault"
     capability: cap_ipc_lock=+ep
     state: present
-  when: ansible_virtualization_type != 'lxc'
+  when: ansible_facts['virtualization_type'] != 'lxc'
 
 # --- Systemd Service & CLI Profile ---
 - name: Deploy Vault systemd service unit

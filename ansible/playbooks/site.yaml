@@ -1,4 +1,14 @@
 ---
+# Step 0: Ensure all nodes (VMs and Transit LXC) are online and reachable via SSH
+- name: Wait for all nodes to become reachable via SSH
+  hosts: all
+  gather_facts: false
+  tasks:
+    - name: Wait for SSH connectivity
+      ansible.builtin.wait_for_connection:
+        delay: 3
+        timeout: 180
+
 # Step 1: Base system setup & directory layout on all nodes
 - name: Prepare base OS and install HashiCorp Vault on all nodes
   hosts: all

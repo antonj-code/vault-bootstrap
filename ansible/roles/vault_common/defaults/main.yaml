@@ -11,10 +11,4 @@ vault_log_dir: "/var/log/vault"
 vault_api_port: 8200
 vault_cluster_port: 8201
 
-# Local artifact directory on Ansible Controller / Runner for keys and certs
 vault_local_credentials_dir: "{{ lookup('env', 'CI_PROJECT_DIR') | default(playbook_dir ~ '/..', true) }}/credentials"
-
-# PKI Configuration
-pki_ca_subject: "/C=US/ST=State/L=City/O=Infrastructure/OU=Security/CN=Vault-Internal-Root-CA"
-pki_cert_validity_days: 365
-pki_ca_validity_days: 3650
