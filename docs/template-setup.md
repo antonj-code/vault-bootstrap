@@ -1,5 +1,8 @@
 # AlmaLinux 9 CIS Level 2 Template Setup Guide (Proxmox Template ID 1000)
 
+> [!NOTE]
+> **Current Baseline vs. Future Automation**: This guide documents the manual creation and configuration of the Golden Template ID 1000 in Proxmox. Fully automating this template build via **HashiCorp Packer** and scheduled GitLab CI/CD pipelines is a planned future project (see [docs/packer-repaving.md](packer-repaving.md)).
+
 This guide documents the exact step-by-step requirements, Proxmox hardware settings, OS installer choices, user accounts, security compliance, and image sanitization procedures for creating the **AlmaLinux 9 CIS Level 2 Golden Template (ID 1000)** on `colossus` and `guardian`.
 
 ---
