@@ -42,21 +42,21 @@
   hosts: all
   gather_facts: false
   tasks:
-    - name: Run Vault health check
-      ansible.builtin.command:
-        cmd: "vault status -format=json"
-      environment:
-        VAULT_ADDR: "https://127.0.0.1:{{ vault_api_port }}"
-        VAULT_CACERT: "{{ vault_tls_dir }}/ca.crt"
+    - name: Run Vault health check via HTTP API
+      ansible.builtin.uri:
+        url: "https://127.0.0.1:{{ vault_api_port }}/v1/sys/health"
+        ca_path: "{{ vault_tls_dir }}/ca.crt"
+        method: GET
+        status_code: [200, 429, 472, 473]
+        return_content: true
       register: health_status_raw
-      failed_when: health_status_raw.rc not in [0, 2]
-      changed_when: false
 
     - name: Display instance health summary
       ansible.builtin.debug:
         msg: >
           Node {{ inventory_hostname }} ({{ ansible_host }}):
-          Initialized={{ (health_status_raw.stdout | from_json).initialized }},
-          Sealed={{ (health_status_raw.stdout | from_json).sealed }},
-          HA Enabled={{ (health_status_raw.stdout | from_json).ha_enabled | default(false) }},
-          Mode={{ 'Standby' if (health_status_raw.stdout | from_json).is_self | default(false) == false else 'Active/Transit' }}
+          Initialized={{ health_status_raw.json.initialized }},
+          Sealed={{ health_status_raw.json.sealed }},
+          Cluster Name={{ health_status_raw.json.cluster_name | default('N/A') }},
+          Version={{ health_status_raw.json.version }},
+          Active={{ not health_status_raw.json.standby | default(false) }}

@@ -31,22 +31,20 @@
 - name: Bootstrap cluster on Primary Node
   when: inventory_hostname == vault_primary_node
   block:
-    - name: Check Primary Node initialization status
-      ansible.builtin.command:
-        cmd: "vault status -format=json"
-      environment:
-        VAULT_ADDR: "https://127.0.0.1:{{ vault_api_port }}"
-        VAULT_CACERT: "{{ vault_tls_dir }}/ca.crt"
-      register: primary_status_raw
-      failed_when: primary_status_raw.rc not in [0, 2]
-      changed_when: false
-
-    - name: Parse Primary Node status
-      ansible.builtin.set_fact:
-        primary_status: "{{ primary_status_raw.stdout | from_json }}"
+    - name: Check Primary Node initialization status via HTTP API
+      ansible.builtin.uri:
+        url: "https://127.0.0.1:{{ vault_api_port }}/v1/sys/init"
+        ca_path: "{{ vault_tls_dir }}/ca.crt"
+        method: GET
+        status_code: [200]
+        return_content: true
+      register: primary_init_check
+      retries: 15
+      delay: 2
+      until: primary_init_check.status == 200
 
     - name: Initialize Main Vault cluster
-      when: not primary_status.initialized
+      when: not primary_init_check.json.initialized
       ansible.builtin.command:
         cmd: "vault operator init -recovery-shares={{ vault_recovery_shares }} -recovery-threshold={{ vault_recovery_threshold }} -format=json"
       environment:
@@ -55,7 +53,7 @@
       register: cluster_init_raw
 
     - name: Save Cluster recovery keys and initial root token to control node
-      when: not primary_status.initialized
+      when: not primary_init_check.json.initialized
       ansible.builtin.copy:
         content: "{{ cluster_init_raw.stdout }}"
         dest: "{{ vault_local_credentials_dir }}/cluster_credentials.json"
