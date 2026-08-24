@@ -16,7 +16,7 @@
 - name: Check if CA key exists on primary node
   ansible.builtin.stat:
     path: "{{ vault_tls_dir }}/ca.key"
-  delegate_to: "{{ vault_primary_node }}"
+  delegate_to: "{{ vault_primary_node | default('vm-vault-01') }}"
   register: existing_ca_key_on_primary
   run_once: true
   ignore_errors: true
@@ -27,13 +27,13 @@
     - name: Fetch existing CA key
       ansible.builtin.slurp:
         src: "{{ vault_tls_dir }}/ca.key"
-      delegate_to: "{{ vault_primary_node }}"
+      delegate_to: "{{ vault_primary_node | default('vm-vault-01') }}"
       register: slurped_ca_key
 
     - name: Fetch existing CA cert
       ansible.builtin.slurp:
         src: "{{ vault_tls_dir }}/ca.crt"
-      delegate_to: "{{ vault_primary_node }}"
+      delegate_to: "{{ vault_primary_node | default('vm-vault-01') }}"
       register: slurped_ca_cert
 
     - name: Write existing CA key to control node
@@ -80,7 +80,7 @@
     owner: "{{ vault_user }}"
     group: "{{ vault_group }}"
     mode: '0600'
-  when: inventory_hostname == vault_primary_node
+  when: inventory_hostname == (vault_primary_node | default('vm-vault-01'))
 
 - name: Issue TLS certificate for new nodes
   when: not existing_node_cert.stat.exists

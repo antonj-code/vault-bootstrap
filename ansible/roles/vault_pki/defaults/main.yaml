@@ -3,6 +3,7 @@ vault_local_credentials_dir: "{{ lookup('env', 'CI_PROJECT_DIR') | default(playb
 vault_tls_dir: "/etc/vault.d/tls"
 vault_user: "vault"
 vault_group: "vault"
+vault_primary_node: "vm-vault-01"
 
 pki_ca_subject: "/C=US/ST=State/L=City/O=Infrastructure/OU=Security/CN=Vault-Internal-Root-CA"
 pki_cert_validity_days: 365
