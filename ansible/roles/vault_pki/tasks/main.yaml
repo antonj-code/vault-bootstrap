@@ -110,12 +110,12 @@
     owner: root
     group: root
     mode: '0644'
-  when: ansible_os_family == 'Debian'
+  when: ansible_facts['os_family'] == 'Debian'
   register: ca_trust_install_debian
 
 - name: Update system CA certificates (Debian)
   ansible.builtin.command: update-ca-certificates
-  when: ansible_os_family == 'Debian' and ca_trust_install_debian.changed
+  when: ansible_facts['os_family'] == 'Debian' and ca_trust_install_debian.changed
 
 - name: Install CA certificate in RedHat / AlmaLinux trust store
   ansible.builtin.copy:
@@ -124,12 +124,12 @@
     owner: root
     group: root
     mode: '0644'
-  when: ansible_os_family == 'RedHat'
+  when: ansible_facts['os_family'] == 'RedHat'
   register: ca_trust_install_redhat
 
 - name: Update system CA certificates (RedHat / AlmaLinux)
   ansible.builtin.command: update-ca-trust extract
-  when: ansible_os_family == 'RedHat' and ca_trust_install_redhat.changed
+  when: ansible_facts['os_family'] == 'RedHat' and ca_trust_install_redhat.changed
 
 - name: Distribute node TLS certificate
   ansible.builtin.copy:
