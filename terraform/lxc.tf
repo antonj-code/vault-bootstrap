@@ -9,6 +9,7 @@ resource "proxmox_virtual_environment_container" "vault_transit" {
   vm_id     = each.value.vmid
   tags      = ["vault", "transit", "auto-unseal", "host2"]
 
+  started   = true
   description = each.value.description
 
   cpu {
