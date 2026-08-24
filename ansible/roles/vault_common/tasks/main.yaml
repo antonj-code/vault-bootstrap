@@ -178,7 +178,7 @@
     dest: /etc/profile.d/vault.sh
     content: |
       export VAULT_ADDR="https://127.0.0.1:{{ vault_api_port }}"
-      export VAULT_CACERT="{{ vault_tls_dir }}/ca.crt"
+      export VAULT_CACERT="/etc/pki/ca-trust/source/anchors/vault-ca.crt"
     owner: root
     group: root
     mode: '0644'
