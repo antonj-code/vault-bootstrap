@@ -72,6 +72,58 @@
         VAULT_ADDR: "https://127.0.0.1:{{ vault_api_port }}"
         VAULT_CACERT: "{{ vault_tls_dir }}/ca.crt"
 
+    - name: Set Transit root token fact
+      ansible.builtin.set_fact:
+        transit_root_token: "{{ (transit_init_raw.stdout | from_json).root_token }}"
+
+    - name: Enable Transit secrets engine
+      ansible.builtin.command:
+        cmd: "{{ vault_bin }} secrets enable -path=transit transit"
+      environment:
+        VAULT_ADDR: "https://127.0.0.1:{{ vault_api_port }}"
+        VAULT_CACERT: "{{ vault_tls_dir }}/ca.crt"
+        VAULT_TOKEN: "{{ transit_root_token }}"
+
+    - name: Create Transit unseal key
+      ansible.builtin.command:
+        cmd: "{{ vault_bin }} write -f transit/keys/{{ transit_key_name }} type={{ transit_key_type }}"
+      environment:
+        VAULT_ADDR: "https://127.0.0.1:{{ vault_api_port }}"
+        VAULT_CACERT: "{{ vault_tls_dir }}/ca.crt"
+        VAULT_TOKEN: "{{ transit_root_token }}"
+
+    - name: Write autounseal policy for Main Cluster
+      ansible.builtin.shell: |
+        {{ vault_bin }} policy write autounseal - <<'EOF'
+        path "transit/encrypt/{{ transit_key_name }}" {
+          capabilities = ["update"]
+        }
+        path "transit/decrypt/{{ transit_key_name }}" {
+          capabilities = ["update"]
+        }
+        EOF
+      environment:
+        VAULT_ADDR: "https://127.0.0.1:{{ vault_api_port }}"
+        VAULT_CACERT: "{{ vault_tls_dir }}/ca.crt"
+        VAULT_TOKEN: "{{ transit_root_token }}"
+
+    - name: Generate Auto-Unseal client token for Main Cluster
+      ansible.builtin.command:
+        cmd: "{{ vault_bin }} token create -orphan -policy=autounseal -period=768h -format=json"
+      environment:
+        VAULT_ADDR: "https://127.0.0.1:{{ vault_api_port }}"
+        VAULT_CACERT: "{{ vault_tls_dir }}/ca.crt"
+        VAULT_TOKEN: "{{ transit_root_token }}"
+      register: autounseal_token_raw
+
+    - name: Store Auto-Unseal token on control node
+      ansible.builtin.copy:
+        content: "{{ (autounseal_token_raw.stdout | from_json).auth.client_token }}"
+        dest: "{{ vault_local_credentials_dir }}/autounseal_token.txt"
+        mode: '0600'
+      delegate_to: localhost
+      become: false
+
 - name: Check if Auto-Unseal token already exists on control node
   ansible.builtin.stat:
     path: "{{ vault_local_credentials_dir }}/autounseal_token.txt"
