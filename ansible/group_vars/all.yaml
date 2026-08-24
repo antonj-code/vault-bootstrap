@@ -12,6 +12,7 @@ vault_log_dir: "/var/log/vault"
 vault_api_port: 8200
 vault_cluster_port: 8201
 vault_primary_node: "vm-vault-01"
+vault_bootstrap_marker: "{{ vault_config_dir }}/.vault_bootstrapped"
 
 # Local artifact directory on Ansible Controller / Runner for keys and certs
 vault_local_credentials_dir: "{{ lookup('env', 'CI_PROJECT_DIR') | default(playbook_dir ~ '/..', true) }}/credentials"

@@ -1,4 +1,15 @@
 ---
+# --- Sentinel Bootstrap State Discovery ---
+- name: Check for bootstrap sentinel marker file
+  ansible.builtin.stat:
+    path: "{{ vault_bootstrap_marker | default('/etc/vault.d/.vault_bootstrapped') }}"
+  register: vault_bootstrap_marker_stat
+
+- name: Set node bootstrap state facts
+  ansible.builtin.set_fact:
+    is_vault_bootstrapped: "{{ vault_bootstrap_marker_stat.stat.exists | default(false) }}"
+    is_vault_new_node: "{{ not (vault_bootstrap_marker_stat.stat.exists | default(false)) }}"
+
 # --- Multi-Distribution Package Installation ---
 - name: Install dependencies on RedHat / AlmaLinux family
   ansible.builtin.dnf:

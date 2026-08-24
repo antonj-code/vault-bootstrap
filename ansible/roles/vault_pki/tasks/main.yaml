@@ -8,32 +8,32 @@
   become: false
   run_once: true
 
-- name: Check if node already has TLS certificate
-  ansible.builtin.stat:
-    path: "{{ vault_tls_dir }}/vault.crt"
-  register: existing_node_cert
+- name: Identify surviving bootstrapped nodes
+  ansible.builtin.set_fact:
+    bootstrapped_survivor: "{{ (groups['all'] | select('extract', hostvars, 'is_vault_bootstrapped') | list | first) | default('') }}"
+  run_once: true
 
-- name: Check if CA key exists on primary node
+- name: Check if CA key exists on surviving node
   ansible.builtin.stat:
     path: "{{ vault_tls_dir }}/ca.key"
-  delegate_to: "{{ vault_primary_node | default('vm-vault-01') }}"
-  register: existing_ca_key_on_primary
+  delegate_to: "{{ bootstrapped_survivor if (bootstrapped_survivor | length > 0) else (vault_primary_node | default('vm-vault-01')) }}"
+  register: existing_ca_key_on_survivor
   run_once: true
   ignore_errors: true
 
-- name: Fetch existing Root CA key and cert from primary node if available
-  when: existing_ca_key_on_primary.stat.exists | default(false)
+- name: Fetch existing Root CA key and cert from surviving node
+  when: (bootstrapped_survivor | length > 0) and (existing_ca_key_on_survivor.stat.exists | default(false))
   block:
     - name: Fetch existing CA key
       ansible.builtin.slurp:
         src: "{{ vault_tls_dir }}/ca.key"
-      delegate_to: "{{ vault_primary_node | default('vm-vault-01') }}"
+      delegate_to: "{{ bootstrapped_survivor }}"
       register: slurped_ca_key
 
     - name: Fetch existing CA cert
       ansible.builtin.slurp:
         src: "{{ vault_tls_dir }}/ca.crt"
-      delegate_to: "{{ vault_primary_node | default('vm-vault-01') }}"
+      delegate_to: "{{ bootstrapped_survivor }}"
       register: slurped_ca_cert
 
     - name: Write existing CA key to control node
@@ -82,7 +82,7 @@
     mode: '0600'
 
 - name: Issue TLS certificate for new nodes
-  when: not existing_node_cert.stat.exists
+  when: is_vault_new_node | default(true)
   block:
     - name: Generate private key for node on control node
       ansible.builtin.command:

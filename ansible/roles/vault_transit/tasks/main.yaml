@@ -245,3 +245,11 @@
     name: vault-transit-unseal
     enabled: true
     state: started
+
+- name: Create bootstrap sentinel marker file for Transit node
+  ansible.builtin.file:
+    path: "{{ vault_bootstrap_marker | default('/etc/vault.d/.vault_bootstrapped') }}"
+    state: touch
+    owner: "{{ vault_user }}"
+    group: "{{ vault_group }}"
+    mode: '0640'

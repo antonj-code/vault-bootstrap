@@ -110,3 +110,11 @@
     - name: Display Raft cluster peer details
       ansible.builtin.debug:
         msg: "Active Raft Peers: {{ (raft_peers_raw.stdout | from_json).data.config.servers }}"
+
+- name: Create bootstrap sentinel marker file on cluster node
+  ansible.builtin.file:
+    path: "{{ vault_bootstrap_marker | default('/etc/vault.d/.vault_bootstrapped') }}"
+    state: touch
+    owner: "{{ vault_user }}"
+    group: "{{ vault_group }}"
+    mode: '0640'
