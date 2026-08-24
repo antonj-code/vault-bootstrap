@@ -1,5 +1,5 @@
 ---
-# Step 0: Ensure all nodes (VMs and Transit LXC) are online and reachable via SSH
+# Step 0: Ensure all nodes (3x Raft VMs and Transit Auto-Unseal VM) are online and reachable via SSH
 - name: Wait for all nodes to become reachable via SSH
   hosts: all
   gather_facts: false
@@ -24,7 +24,7 @@
     - role: vault_pki
 
 # Step 3: Deploy, initialize, and configure Transit Auto-Unseal Vault
-- name: Configure and bootstrap Transit Auto-Unseal Vault LXC
+- name: Configure and bootstrap Transit Auto-Unseal Vault VM
   hosts: vault_transit
   gather_facts: false
   roles:

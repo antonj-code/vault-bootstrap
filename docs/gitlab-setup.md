@@ -37,7 +37,7 @@ ssh-keygen -t ed25519 -f ~/.ssh/vault_deploy_key -N "" -C "gitlab-runner@gitbox.
 ```
 
 * `~/.ssh/vault_deploy_key`: Private key configured in GitLab CI/CD variables (`SSH_PRIVATE_KEY`). **Never commit this to Git.**
-* `~/.ssh/vault_deploy_key.pub`: Public key injected into VMs and LXC container via `TF_VAR_ssh_public_keys`.
+* `~/.ssh/vault_deploy_key.pub`: Public key injected into all 4 VMs via `TF_VAR_ssh_public_keys`.
 
 ---
 

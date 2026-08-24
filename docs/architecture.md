@@ -1,6 +1,6 @@
 # Vault High Availability Architecture & Proxmox Distribution Guide
 
-This document outlines the architecture, distribution logic, quorum behavior, network topology, and security hardening for a high-availability **3-Node HashiCorp Vault Cluster** with an isolated **Transit Auto-Unseal Vault LXC** running across **2x Standalone Proxmox VE physical hosts: `colossus` and `guardian`**.
+This document outlines the architecture, distribution logic, quorum behavior, network topology, and security hardening for a high-availability **3-Node HashiCorp Vault Cluster** with an isolated **Transit Auto-Unseal Vault VM** running across **2x Standalone Proxmox VE physical hosts: `colossus` and `guardian`**.
 
 ---
 

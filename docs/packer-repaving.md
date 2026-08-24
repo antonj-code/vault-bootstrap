@@ -1,6 +1,9 @@
-# Weekly Automated Repaving Guide (Packer + Method A Rolling Sync)
+# Automated Repaving Guide (Packer + Method A Rolling Sync)
 
-This guide documents the architecture, automation, and operational procedures for rebuilding the 3-Node HashiCorp Vault Cluster and Transit LXC on a weekly schedule using **Packer** and **Method A (Zero-Downtime Rolling Raft Peer Sync)**.
+> [!NOTE]
+> **Future Project Roadmap**: Automated Packer CI/CD template generation is a planned future project. Currently, the base golden image (Template ID 1000) is created and maintained on Proxmox using the [Template Setup Guide](template-setup.md). This document outlines the architectural blueprint and operational procedures once the automated Packer pipeline is integrated.
+
+This guide documents the architecture, automation, and operational procedures for rebuilding the 3-Node HashiCorp Vault Cluster and Transit VM using **Packer** and **Method A (Zero-Downtime Rolling Raft Peer Sync)**.
 
 ---
 
@@ -8,8 +11,8 @@ This guide documents the architecture, automation, and operational procedures fo
 
 ```mermaid
 flowchart TD
-    subgraph Phase_1["Phase 1: Weekly Packer Build"]
-        A["GitLab Scheduled Cron<br/>(e.g., Every Sunday 02:00 UTC)"] --> B["Packer Proxmox Builder<br/>(almalinux9-cis.pkr.hcl)"]
+    subgraph Phase_1["Phase 1: Scheduled Packer Build (Future Implementation)"]
+        A["GitLab Scheduled Cron<br/>(e.g., Monthly/Weekly)"] --> B["Packer Proxmox Builder<br/>(almalinux9-cis.pkr.hcl)"]
         B --> C["Applies Latest Security Errata & CIS Level 2"]
         C --> D["Pre-bakes Vault Binary + Hardened Sysctl"]
         D --> E["Creates Proxmox Template ID 1000<br/>(on colossus & guardian)"]
@@ -17,7 +20,7 @@ flowchart TD
 
     subgraph Phase_2["Phase 2: Zero-Downtime Rolling Repave"]
         E --> F["Pre-flight: Take Automated Raft Snapshot Backup"]
-        F --> G["1. Repave vm-vault-transit (LXC)"]
+        F --> G["1. Repave vm-vault-transit (Auto-Unseal VM)"]
         G --> H["2. Repave vm-vault-03 (guardian Standby) -> Wait for 3/3 Raft Voter Sync"]
         H --> I["3. Repave vm-vault-02 (colossus Standby) -> Wait for 3/3 Raft Voter Sync"]
         I --> J["4. Step down Leader -> Repave vm-vault-01 (colossus) -> Wait for 3/3 Raft Voter Sync"]

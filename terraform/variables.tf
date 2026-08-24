@@ -42,7 +42,7 @@ variable "proxmox_insecure" {
 
 # --- Storage & Network Configuration ---
 variable "storage_datastore" {
-  description = "Storage datastore for VM and LXC root disks (e.g. local-lvm, local-zfs, ceph-pool)"
+  description = "Storage datastore for VM root disks (e.g. local-lvm, local-zfs, ceph-pool)"
   type        = string
   default     = "local-lvm"
 }
@@ -60,7 +60,7 @@ variable "network_bridge" {
 }
 
 variable "network_gateway" {
-  description = "Default IPv4 Gateway for VMs and Containers"
+  description = "Default IPv4 Gateway for Vault VMs"
   type        = string
   default     = "192.168.0.1"
 }
@@ -78,7 +78,7 @@ variable "search_domain" {
 }
 
 variable "ssh_public_keys" {
-  description = "SSH public keys (accepts JSON list of strings or single raw string) injected into VMs and LXC"
+  description = "SSH public keys (accepts JSON list of strings or single raw string) injected into VMs"
   type        = any
   default     = []
 }

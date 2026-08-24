@@ -1,6 +1,6 @@
-# Vault Bootstrap: 3-Node HA Cluster + Transit Auto-Unseal LXC on Proxmox VE
+# Vault Bootstrap: 3-Node HA Cluster + Transit Auto-Unseal VM on Proxmox VE
 
-This repository contains the complete Infrastructure-as-Code (Terraform / OpenTofu), Configuration Management (Ansible), and GitOps CI/CD pipeline (`.gitlab-ci.yml`) to deploy a production-grade, highly available **3-Node HashiCorp Vault Cluster** (Raft Integrated Storage) with an isolated **Transit Auto-Unseal Vault LXC** across **2x Standalone Proxmox VE physical hosts: `colossus` and `guardian`**.
+This repository contains the complete Infrastructure-as-Code (Terraform / OpenTofu), Configuration Management (Ansible), and GitOps CI/CD pipeline (`.gitlab-ci.yml`) to deploy a production-grade, highly available **3-Node HashiCorp Vault Cluster** (Raft Integrated Storage) with an isolated **Transit Auto-Unseal Vault VM** across **2x Standalone Proxmox VE physical hosts: `colossus` and `guardian`**.
 
 ---
 
@@ -69,9 +69,10 @@ vault-bootstrap/
 ├── README.md                       # Comprehensive operational guide
 ├── docs/
 │   ├── architecture.md             # Deep-dive architecture and threat model
+│   ├── security-operations.md      # Post-bootstrap secrets, recovery keys & break-glass runbook
 │   ├── gitlab-setup.md             # GitLab CI/CD setup guide on gitbox.jnet.lan
 │   ├── template-setup.md           # AlmaLinux 9 CIS Level 2 Proxmox template (ID 1000) setup guide
-│   └── packer-repaving.md          # Weekly automated Packer build & rolling repave guide
+│   └── packer-repaving.md          # Automated Packer build & rolling repave guide
 ├── packer/                         # Automated AlmaLinux 9 CIS Level 2 Image Builder
 │   ├── almalinux9-cis.pkr.hcl      # Proxmox ISO Packer template
 │   ├── variables.pkr.hcl           # Packer variable definitions
@@ -82,23 +83,22 @@ vault-bootstrap/
 │   ├── versions.tf                 # bpg/proxmox provider & GitLab HTTP backend
 │   ├── variables.tf                # Dual-host endpoints, node configs, credentials
 │   ├── main.tf                     # Standalone provider configurations (proxmox.pve1, proxmox.pve2)
-│   ├── vms.tf                      # 3x Main Vault Raft VMs (Cloned from Template 1000)
-│   ├── lxc.tf                      # 1x Transit Auto-Unseal LXC
+│   ├── vms.tf                      # 4x Vault VMs: 3x Raft Cluster + 1x Transit Auto-Unseal (Template 1000)
 │   ├── outputs.tf                  # Outputs & dynamic Ansible inventory generation
 │   └── terraform.tfvars.example    # Sample configuration values
 ├── ansible/                        # Configuration Management & Orchestration
 │   ├── ansible.cfg                 # Performance, SSH, and role settings
 │   ├── inventory/
-│   │   └── hosts.yaml              # Node inventory mapping (192.168.0.200 - 203)
-│   ├── group_vars/
-│   │   ├── all.yaml                # Global PKI & Vault versions
-│   │   ├── vault_cluster.yaml      # Raft cluster variables & recovery keys
-│   │   └── vault_transit.yaml      # Transit LXC parameters
+│   │   ├── hosts.yaml              # Node inventory mapping (192.168.0.200 - 203)
+│   │   └── group_vars/             # Host group variable scoping
+│   │       ├── all.yaml            # Global PKI, versions, sentinel marker definition
+│   │       ├── vault_cluster.yaml  # Raft cluster variables & recovery keys
+│   │       └── vault_transit.yaml  # Transit Auto-Unseal parameters
 │   ├── roles/
-│   │   ├── vault_common/           # Binary install, systemd, user, mlock/capabilities
-│   │   ├── vault_pki/              # Mutual TLS Root CA & SAN certificates
+│   │   ├── vault_common/           # Sentinel discovery, binary install, systemd, user, mlock
+│   │   ├── vault_pki/              # Mutual TLS Root CA slurp & SAN certificate issuance
 │   │   ├── vault_transit/          # Transit engine init, unseal key & scoped token
-│   │   └── vault_cluster/          # Raft configuration, auto-unseal & auto-join
+│   │   └── vault_cluster/          # Raft configuration, auto-unseal, retry_join, sentinel marker
 │   └── playbooks/
 │       ├── site.yaml               # Master end-to-end bootstrap playbook
 │       ├── rolling_update.yaml     # Zero-downtime rolling repave (Method A)
@@ -147,6 +147,14 @@ source scripts/vault_env.sh 192.168.0.201
 vault status
 vault operator raft list-peers
 ```
+
+---
+
+## 🗺️ Roadmap & Future Projects
+
+* **Packer Golden Image CI/CD Pipeline**: Fully automating the creation and synchronization of the AlmaLinux 9 CIS Level 2 base template (ID 1000) across `colossus` and `guardian` via scheduled GitLab CI/CD jobs. *(Planned for future implementation)*
+* **L4 Load Balancer Integration**: Fronting the 3-node cluster with a dedicated Layer 4 HAProxy / VIP (`https://vault.jnet.lan:8200`) for seamless client failover.
+* **OIDC & AppRole Provisioning**: Automated Terraform provider integration for application secrets and human authentication.
 
 ---
 
