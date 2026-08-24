@@ -110,8 +110,8 @@ variable "vault_vm_config" {
   }
 }
 
-variable "vault_lxc_config" {
-  description = "Configuration parameters for Transit Vault LXC"
+variable "vault_transit_config" {
+  description = "Configuration parameters for Transit Auto-Unseal Vault VM"
   type = object({
     cores     = number
     memory    = number
@@ -120,14 +120,8 @@ variable "vault_lxc_config" {
   default = {
     cores     = 1
     memory    = 1024
-    disk_size = 8
+    disk_size = 32
   }
-}
-
-variable "lxc_template_path" {
-  description = "Volume ID / Path of the AlmaLinux 9 LXC OS template on guardian (e.g. local:vztmpl/almalinux-9-default_latest.tar.xz)"
-  type        = string
-  default     = "local:vztmpl/almalinux-9-default_latest.tar.xz"
 }
 
 # --- Host 1 Node Allocations (colossus) ---
@@ -154,7 +148,7 @@ variable "host1_vms" {
 
 # --- Host 2 Node Allocations (guardian) ---
 variable "host2_vms" {
-  description = "VMs to deploy on standalone Host 2 (guardian)"
+  description = "Cluster VMs to deploy on standalone Host 2 (guardian)"
   type = map(object({
     vmid        = number
     ip_cidr     = string
@@ -169,8 +163,8 @@ variable "host2_vms" {
   }
 }
 
-variable "host2_lxcs" {
-  description = "LXCs to deploy on standalone Host 2 (guardian)"
+variable "transit_vms" {
+  description = "Transit Auto-Unseal VM to deploy on standalone Host 2 (guardian)"
   type = map(object({
     vmid        = number
     ip_cidr     = string
@@ -180,7 +174,7 @@ variable "host2_lxcs" {
     "vm-vault-transit" = {
       vmid        = 500
       ip_cidr     = "192.168.0.200/24"
-      description = "Isolated Transit Vault LXC (Auto-Unseal Engine - guardian)"
+      description = "Isolated Transit Auto-Unseal Vault VM (guardian)"
     }
   }
 }

@@ -147,3 +147,78 @@ resource "proxmox_virtual_environment_vm" "vault_nodes_host2" {
 
   serial_device {}
 }
+
+# ==============================================================================
+# PROXMOX HOST 2 (Standalone guardian): vm-vault-transit (Auto-Unseal VM)
+# Cloned from AlmaLinux 9 CIS Level 2 Template (ID 1000)
+# ==============================================================================
+
+resource "proxmox_virtual_environment_vm" "vault_transit" {
+  provider  = proxmox.pve2
+  for_each  = var.transit_vms
+  name      = each.key
+  node_name = var.pve_host_2_node_name
+  vm_id     = each.value.vmid
+  tags      = ["vault", "transit", "auto-unseal", "host2", "almalinux9", "cis2"]
+
+  description = each.value.description
+
+  clone {
+    vm_id = var.template_vm_id
+  }
+
+  cpu {
+    cores = var.vault_transit_config.cores
+    type  = "host"
+  }
+
+  memory {
+    dedicated = var.vault_transit_config.memory
+    floating  = var.vault_transit_config.memory
+  }
+
+  started = true
+
+  agent {
+    enabled = true
+    timeout = "60s"
+  }
+
+  disk {
+    datastore_id = var.storage_datastore
+    interface    = "scsi0"
+    iothread     = true
+    discard      = "on"
+    size         = var.vault_transit_config.disk_size
+  }
+
+  initialization {
+    ip_config {
+      ipv4 {
+        address = each.value.ip_cidr
+        gateway = var.network_gateway
+      }
+    }
+
+    dns {
+      domain  = var.search_domain
+      servers = var.dns_servers
+    }
+
+    user_account {
+      username = var.ci_user
+      keys     = local.parsed_ssh_keys
+    }
+  }
+
+  network_device {
+    bridge = var.network_bridge
+    model  = "virtio"
+  }
+
+  operating_system {
+    type = "l26"
+  }
+
+  serial_device {}
+}

@@ -36,13 +36,11 @@ vault_vm_config = {
   disk_size = 32
 }
 
-vault_lxc_config = {
+vault_transit_config = {
   cores     = 1
   memory    = 1024
-  disk_size = 8
+  disk_size = 32
 }
-
-lxc_template_path = "local:vztmpl/almalinux-9-default_latest.tar.xz"
 
 # Node IP and Host Allocation
 host1_vms = {
@@ -66,10 +64,10 @@ host2_vms = {
   }
 }
 
-host2_lxcs = {
+transit_vms = {
   "vm-vault-transit" = {
     vmid        = 500
     ip_cidr     = "192.168.0.200/24"
-    description = "Isolated Transit Vault LXC (Auto-Unseal Engine - guardian)"
+    description = "Isolated Transit Auto-Unseal Vault VM (guardian)"
   }
 }

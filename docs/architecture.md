@@ -17,7 +17,7 @@ flowchart TB
     subgraph Physical_Host_2["Standalone Proxmox Host 2 (guardian)"]
         direction TB
         V3["vm-vault-03 (VM)<br/>Role: Raft Node 3<br/>IP: 192.168.0.203<br/>Port: 8200 / 8201"]
-        VT["vm-vault-transit (LXC)<br/>Role: Auto-Unseal Engine<br/>IP: 192.168.0.200<br/>Port: 8200"]
+        VT["vm-vault-transit (VM)<br/>Role: Auto-Unseal Engine<br/>IP: 192.168.0.200<br/>Port: 8200"]
     end
 
     subgraph Management_Host["GitLab Server (gitbox.jnet.lan)"]
@@ -61,7 +61,7 @@ $$Q = \left\lfloor \frac{N}{2} \right\rfloor + 1$$
 For a 3-node cluster ($N=3$), minimum quorum requires **2 active nodes**.
 
 * **Host 1 (`colossus`)**: `vm-vault-01` (VM), `vm-vault-02` (VM) — Holds 2 voting members.
-* **Host 2 (`guardian`)**: `vm-vault-03` (VM), `vm-vault-transit` (LXC) — Holds 1 voting member + Transit Auto-Unseal oracle.
+* **Host 2 (`guardian`)**: `vm-vault-03` (VM), `vm-vault-transit` (VM) — Holds 1 voting member + Transit Auto-Unseal oracle.
 
 ```mermaid
 graph TD
@@ -86,7 +86,7 @@ graph TD
 | **Host 2 (`guardian`) Dies** | 2 / 3 (`vm-vault-01`, `vm-vault-02`) | **MAINTAINED** (2 $\ge$ 2) | Offline | **Zero disruption on active cluster operations.** Cluster remains fully read/write on `colossus`. Transit is only queried during node restarts. |
 | **Host 1 (`colossus`) Dies** | 1 / 3 (`vm-vault-03`) | **LOST** (1 < 2) | Online | **Cluster enters safe read-only/halt state** to prevent split-brain. If `colossus` is unrecoverable, run [`scripts/raft_recovery.sh`](../scripts/raft_recovery.sh) on `vm-vault-03` to force single-node quorum. |
 | **Inter-Host Network Split** | Host 1 (2 nodes) vs Host 2 (1 node) | Host 1 retains quorum (2/3); Host 2 is isolated (1/3) | Host 1 cannot reach Transit; Host 2 has Transit | Host 1 continues serving clients. Host 2 steps down. Split-brain is prevented because Raft leader election strictly requires $\ge 2$ votes. |
-| **Transit LXC Fails** | 3 / 3 | **MAINTAINED** | Offline | **Zero runtime read/write disruption.** Existing in-memory barrier keys are unaffected. Restart `vm-vault-transit` LXC when convenient. |
+| **Transit VM Fails** | 3 / 3 | **MAINTAINED** | Offline | **Zero runtime read/write disruption.** Existing in-memory barrier keys are unaffected. Restart `vm-vault-transit` VM when convenient. |
 
 ---
 

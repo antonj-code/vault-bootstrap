@@ -17,7 +17,7 @@ flowchart TB
     subgraph Host2["Standalone Proxmox Host 2 (guardian)"]
         direction TB
         V3["vm-vault-03 (VM)<br/>IP: 192.168.0.203<br/>Raft Node 3"]
-        VT["vm-vault-transit (LXC)<br/>IP: 192.168.0.200<br/>Transit Auto-Unseal Oracle"]
+        VT["vm-vault-transit (VM)<br/>IP: 192.168.0.200<br/>Transit Auto-Unseal Oracle"]
     end
 
     subgraph Management["GitLab Server (gitbox.jnet.lan)"]
@@ -47,17 +47,17 @@ flowchart TB
 In a 3-node Raft consensus cluster, quorum requires a strict majority of **2 nodes** ($Q = \lfloor 3/2 \rfloor + 1 = 2$). Across your 2 standalone physical hosts:
 
 * **Host 1 (`colossus`)**: `vm-vault-01` (`192.168.0.201`), `vm-vault-02` (`192.168.0.202`) — Cloned from AlmaLinux 9 CIS Level 2 template (ID 1000). Holds 2 Raft voting members.
-* **Host 2 (`guardian`)**: `vm-vault-03` (`192.168.0.203`) [Cloned from Template 1000], `vm-vault-transit` (`192.168.0.200`) [LXC] — Holds 1 Raft voting member + Transit Auto-Unseal oracle.
+* **Host 2 (`guardian`)**: `vm-vault-03` (`192.168.0.203`) [Cloned from Template 1000], `vm-vault-transit` (`192.168.0.200`) [Cloned from Template 1000] — Holds 1 Raft voting member + Transit Auto-Unseal oracle.
 * **Hypervisor Independence**: Because `colossus` and `guardian` are non-clustered standalone hosts, they have complete failure isolation with zero inter-hypervisor dependencies.
 
 ### Failure Scenarios & Mitigations
 
 | Failure Scenario | Active Raft Nodes | Quorum State | Cluster Impact | Operational Action |
 |---|---|---|---|---|
-| **Host 2 (`guardian`) Fails** | 2 / 3 (`vm-vault-01`, `vm-vault-02`) | **QUORUM MAINTAINED** | **Zero downtime.** Cluster continues read/write operations seamlessly. Transit is only required when instances reboot/restart. | Restore `guardian` or restart `vm-vault-transit` LXC when convenient. |
+| **Host 2 (`guardian`) Fails** | 2 / 3 (`vm-vault-01`, `vm-vault-02`) | **QUORUM MAINTAINED** | **Zero downtime.** Cluster continues read/write operations seamlessly. Transit is only required when instances reboot/restart. | Restore `guardian` or restart `vm-vault-transit` VM when convenient. |
 | **Host 1 (`colossus`) Fails** | 1 / 3 (`vm-vault-03`) | **QUORUM LOST** | **Cluster halts writes** to protect against split-brain corruption. | If `colossus` is recoverable, power it back on. If permanently destroyed, run [`scripts/raft_recovery.sh`](scripts/raft_recovery.sh) on `vm-vault-03` to promote it to single-node quorum. |
 | **Network Partition (colossus vs guardian)** | `colossus` (2 nodes) vs `guardian` (1 node) | `colossus` retains quorum (2/3) | `colossus` continues serving client traffic; `guardian` isolates itself. | Network partition auto-heals when link recovers; Raft log syncs automatically. |
-| **Transit LXC Fails** | 3 / 3 | **QUORUM MAINTAINED** | **Zero downtime.** Existing unsealed memory state is unaffected. | Restart `vm-vault-transit` LXC. |
+| **Transit VM Fails** | 3 / 3 | **QUORUM MAINTAINED** | **Zero downtime.** Existing unsealed memory state is unaffected. | Restart `vm-vault-transit` VM. |
 
 ---
 

@@ -23,4 +23,3 @@ all:
           ansible_host: 192.168.0.200
           vault_node_id: 500
           pve_host: guardian
-          ansible_user: root
