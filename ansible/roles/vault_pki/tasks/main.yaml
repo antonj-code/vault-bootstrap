@@ -10,7 +10,17 @@
 
 - name: Identify surviving bootstrapped nodes
   ansible.builtin.set_fact:
-    bootstrapped_survivor: "{{ (groups['all'] | select('extract', hostvars, 'is_vault_bootstrapped') | list | first) | default('') }}"
+    bootstrapped_survivor: >-
+      {{
+        (groups['all']
+        | map('extract', hostvars)
+        | selectattr('is_vault_bootstrapped', 'defined')
+        | selectattr('is_vault_bootstrapped', 'equalto', true)
+        | map(attribute='inventory_hostname')
+        | list
+        | first)
+        | default('')
+      }}
   run_once: true
 
 - name: Check if CA key exists on surviving node
