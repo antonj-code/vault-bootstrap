@@ -9,6 +9,7 @@ resource "proxmox_virtual_environment_vm" "vault_nodes_host1" {
   name      = each.key
   node_name = var.pve_host_1_node_name
   vm_id     = each.value.vmid
+  pool_id   = var.resource_pool_id != "" ? var.resource_pool_id : null
   tags      = ["vault", "raft", "host1", "almalinux9", "cis2"]
 
   description = each.value.description
@@ -88,6 +89,7 @@ resource "proxmox_virtual_environment_vm" "vault_nodes_host2" {
   name      = each.key
   node_name = var.pve_host_2_node_name
   vm_id     = each.value.vmid
+  pool_id   = var.resource_pool_id != "" ? var.resource_pool_id : null
   tags      = ["vault", "raft", "host2", "almalinux9", "cis2"]
 
   description = each.value.description
@@ -167,6 +169,7 @@ resource "proxmox_virtual_environment_vm" "vault_transit" {
   name      = each.key
   node_name = var.pve_host_2_node_name
   vm_id     = each.value.vmid
+  pool_id   = var.resource_pool_id != "" ? var.resource_pool_id : null
   tags      = ["vault", "transit", "auto-unseal", "host2", "almalinux9", "cis2"]
 
   description = each.value.description

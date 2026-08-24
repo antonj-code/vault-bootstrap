@@ -10,9 +10,10 @@ pve_host_2_node_name = "guardian"
 
 proxmox_insecure = true
 
-# Storage Pools
+# Storage & Resource Pools
 storage_datastore = "local-lvm"
 snippet_datastore = "local"
+resource_pool_id  = "backup_pool"
 
 # Networking
 network_bridge  = "vmbr0"

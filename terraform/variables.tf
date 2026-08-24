@@ -47,6 +47,12 @@ variable "storage_datastore" {
   default     = "local-lvm"
 }
 
+variable "resource_pool_id" {
+  description = "Proxmox resource pool to assign all Vault VMs to (e.g. backup_pool)"
+  type        = string
+  default     = "backup_pool"
+}
+
 variable "snippet_datastore" {
   description = "Datastore storing Cloud-Init snippets or download files (e.g. local)"
   type        = string
