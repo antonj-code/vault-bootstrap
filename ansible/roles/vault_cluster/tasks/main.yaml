@@ -66,8 +66,29 @@
     seconds: 10
   when: inventory_hostname == vault_primary_node
 
-- name: Validate Raft cluster peer membership
+- name: Check if cluster credentials exist on control node
+  ansible.builtin.stat:
+    path: "{{ vault_local_credentials_dir }}/cluster_credentials.json"
+  delegate_to: localhost
+  become: false
+  register: cluster_creds_stat
   when: inventory_hostname == vault_primary_node
+
+- name: Validate Raft cluster leader state via HTTP API
+  when: inventory_hostname == vault_primary_node
+  ansible.builtin.uri:
+    url: "https://127.0.0.1:{{ vault_api_port }}/v1/sys/leader"
+    ca_path: "{{ vault_tls_dir }}/ca.crt"
+    method: GET
+    status_code: [200]
+    return_content: true
+  register: cluster_leader_status
+  retries: 12
+  delay: 3
+  until: cluster_leader_status.status == 200 and cluster_leader_status.json.is_self | default(false)
+
+- name: Validate Raft cluster peer membership if root token is available
+  when: inventory_hostname == vault_primary_node and (cluster_creds_stat.stat.exists | default(false))
   block:
     - name: Load Cluster root token
       ansible.builtin.set_fact:

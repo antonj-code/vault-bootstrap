@@ -72,85 +72,68 @@
         VAULT_ADDR: "https://127.0.0.1:{{ vault_api_port }}"
         VAULT_CACERT: "{{ vault_tls_dir }}/ca.crt"
 
-- name: Read Transit credentials from control node if already initialized
-  when: transit_init_check.json.initialized
-  block:
-    - name: Fetch stored Transit credentials
-      ansible.builtin.slurp:
-        src: "{{ vault_local_credentials_dir }}/transit_credentials.json"
-      delegate_to: localhost
-      become: false
-      register: stored_transit_creds
-
-    - name: Unseal Transit Vault if sealed
-      ansible.builtin.command:
-        cmd: "{{ vault_bin }} operator unseal {{ (stored_transit_creds.content | b64decode | from_json).unseal_keys_b64[0] }}"
-      environment:
-        VAULT_ADDR: "https://127.0.0.1:{{ vault_api_port }}"
-        VAULT_CACERT: "{{ vault_tls_dir }}/ca.crt"
-      when: transit_seal_check.json.sealed | default(false)
-
-- name: Load Transit root token
-  ansible.builtin.set_fact:
-    transit_root_token: "{{ ((lookup('file', vault_local_credentials_dir + '/transit_credentials.json') | from_json).root_token) }}"
-
-- name: Check enabled secrets engines on Transit Vault
-  ansible.builtin.command:
-    cmd: "{{ vault_bin }} secrets list -format=json"
-  environment:
-    VAULT_ADDR: "https://127.0.0.1:{{ vault_api_port }}"
-    VAULT_CACERT: "{{ vault_tls_dir }}/ca.crt"
-    VAULT_TOKEN: "{{ transit_root_token }}"
-  register: transit_secrets_list
-  changed_when: false
-
-- name: Enable Transit secrets engine
-  ansible.builtin.command:
-    cmd: "{{ vault_bin }} secrets enable -path=transit transit"
-  environment:
-    VAULT_ADDR: "https://127.0.0.1:{{ vault_api_port }}"
-    VAULT_CACERT: "{{ vault_tls_dir }}/ca.crt"
-    VAULT_TOKEN: "{{ transit_root_token }}"
-  when: "'transit/' not in (transit_secrets_list.stdout | from_json)"
-
-- name: Create or verify Transit unseal key
-  ansible.builtin.command:
-    cmd: "{{ vault_bin }} write -f transit/keys/{{ transit_key_name }} type={{ transit_key_type }}"
-  environment:
-    VAULT_ADDR: "https://127.0.0.1:{{ vault_api_port }}"
-    VAULT_CACERT: "{{ vault_tls_dir }}/ca.crt"
-    VAULT_TOKEN: "{{ transit_root_token }}"
-  register: transit_key_create
-  changed_when: transit_key_create.rc == 0
-
-- name: Write autounseal policy for Main Cluster
-  ansible.builtin.shell: |
-    {{ vault_bin }} policy write autounseal - <<'EOF'
-    path "transit/encrypt/{{ transit_key_name }}" {
-      capabilities = ["update"]
-    }
-    path "transit/decrypt/{{ transit_key_name }}" {
-      capabilities = ["update"]
-    }
-    EOF
-  environment:
-    VAULT_ADDR: "https://127.0.0.1:{{ vault_api_port }}"
-    VAULT_CACERT: "{{ vault_tls_dir }}/ca.crt"
-    VAULT_TOKEN: "{{ transit_root_token }}"
-
-- name: Generate Auto-Unseal client token for Main Cluster
-  ansible.builtin.command:
-    cmd: "{{ vault_bin }} token create -orphan -policy=autounseal -period=768h -format=json"
-  environment:
-    VAULT_ADDR: "https://127.0.0.1:{{ vault_api_port }}"
-    VAULT_CACERT: "{{ vault_tls_dir }}/ca.crt"
-    VAULT_TOKEN: "{{ transit_root_token }}"
-  register: autounseal_token_raw
-
-- name: Store Auto-Unseal token on control node
-  ansible.builtin.copy:
-    content: "{{ (autounseal_token_raw.stdout | from_json).auth.client_token }}"
-    dest: "{{ vault_local_credentials_dir }}/autounseal_token.txt"
-    mode: '0600'
+- name: Check if Auto-Unseal token already exists on control node
+  ansible.builtin.stat:
+    path: "{{ vault_local_credentials_dir }}/autounseal_token.txt"
   delegate_to: localhost
   become: false
+  register: existing_unseal_token_file
+
+- name: Recover Auto-Unseal token from primary cluster node if present
+  when: transit_init_check.json.initialized and not (existing_unseal_token_file.stat.exists | default(false))
+  block:
+    - name: Check if vault.hcl exists on primary node
+      ansible.builtin.stat:
+        path: "{{ vault_config_dir }}/vault.hcl"
+      delegate_to: "{{ vault_primary_node }}"
+      register: primary_vault_hcl_stat
+      ignore_errors: true
+
+    - name: Slurp primary vault.hcl and extract token
+      when: primary_vault_hcl_stat.stat.exists | default(false)
+      block:
+        - name: Read vault.hcl on primary node
+          ansible.builtin.slurp:
+            src: "{{ vault_config_dir }}/vault.hcl"
+          delegate_to: "{{ vault_primary_node }}"
+          register: slurped_primary_vault_hcl
+
+        - name: Extract token regex
+          ansible.builtin.set_fact:
+            extracted_unseal_token: "{{ (slurped_primary_vault_hcl.content | b64decode) | regex_search('token\\s*=\\s*\"([^\"]+)\"', '\\1') | first }}"
+
+        - name: Write extracted Auto-Unseal token to control node
+          ansible.builtin.copy:
+            content: "{{ extracted_unseal_token }}"
+            dest: "{{ vault_local_credentials_dir }}/autounseal_token.txt"
+            mode: '0600'
+          delegate_to: localhost
+          become: false
+          when: extracted_unseal_token is defined and extracted_unseal_token | length > 0
+
+- name: Unseal Transit Vault if sealed
+  when: transit_init_check.json.initialized and (transit_seal_check.json.sealed | default(false))
+  block:
+    - name: Check if transit credentials exist on control node
+      ansible.builtin.stat:
+        path: "{{ vault_local_credentials_dir }}/transit_credentials.json"
+      delegate_to: localhost
+      become: false
+      register: transit_creds_stat
+
+    - name: Unseal Transit using stored credentials
+      when: transit_creds_stat.stat.exists
+      block:
+        - name: Fetch stored Transit credentials
+          ansible.builtin.slurp:
+            src: "{{ vault_local_credentials_dir }}/transit_credentials.json"
+          delegate_to: localhost
+          become: false
+          register: stored_transit_creds
+
+        - name: Unseal Transit Vault
+          ansible.builtin.command:
+            cmd: "{{ vault_bin }} operator unseal {{ (stored_transit_creds.content | b64decode | from_json).unseal_keys_b64[0] }}"
+          environment:
+            VAULT_ADDR: "https://127.0.0.1:{{ vault_api_port }}"
+            VAULT_CACERT: "{{ vault_tls_dir }}/ca.crt"

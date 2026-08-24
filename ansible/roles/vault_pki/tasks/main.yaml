@@ -8,7 +8,52 @@
   become: false
   run_once: true
 
-- name: Generate Root CA private key on control node
+- name: Check if node already has TLS certificate
+  ansible.builtin.stat:
+    path: "{{ vault_tls_dir }}/vault.crt"
+  register: existing_node_cert
+
+- name: Check if CA key exists on primary node
+  ansible.builtin.stat:
+    path: "{{ vault_tls_dir }}/ca.key"
+  delegate_to: "{{ vault_primary_node }}"
+  register: existing_ca_key_on_primary
+  run_once: true
+  ignore_errors: true
+
+- name: Fetch existing Root CA key and cert from primary node if available
+  when: existing_ca_key_on_primary.stat.exists | default(false)
+  block:
+    - name: Fetch existing CA key
+      ansible.builtin.slurp:
+        src: "{{ vault_tls_dir }}/ca.key"
+      delegate_to: "{{ vault_primary_node }}"
+      register: slurped_ca_key
+
+    - name: Fetch existing CA cert
+      ansible.builtin.slurp:
+        src: "{{ vault_tls_dir }}/ca.crt"
+      delegate_to: "{{ vault_primary_node }}"
+      register: slurped_ca_cert
+
+    - name: Write existing CA key to control node
+      ansible.builtin.copy:
+        content: "{{ slurped_ca_key.content | b64decode }}"
+        dest: "{{ vault_local_credentials_dir }}/tls/ca.key"
+        mode: '0600'
+      delegate_to: localhost
+      become: false
+
+    - name: Write existing CA cert to control node
+      ansible.builtin.copy:
+        content: "{{ slurped_ca_cert.content | b64decode }}"
+        dest: "{{ vault_local_credentials_dir }}/tls/ca.crt"
+        mode: '0644'
+      delegate_to: localhost
+      become: false
+  run_once: true
+
+- name: Generate Root CA private key on control node if not present
   ansible.builtin.command:
     cmd: "openssl genrsa -out {{ vault_local_credentials_dir }}/tls/ca.key 4096"
     creates: "{{ vault_local_credentials_dir }}/tls/ca.key"
@@ -16,7 +61,7 @@
   become: false
   run_once: true
 
-- name: Generate Root CA certificate on control node
+- name: Generate Root CA certificate on control node if not present
   ansible.builtin.command:
     cmd: >
       openssl req -x509 -new -nodes -key {{ vault_local_credentials_dir }}/tls/ca.key
@@ -28,72 +73,100 @@
   become: false
   run_once: true
 
-- name: Generate private key for node on control node
-  ansible.builtin.command:
-    cmd: "openssl genrsa -out {{ vault_local_credentials_dir }}/tls/{{ inventory_hostname }}.key 2048"
-    creates: "{{ vault_local_credentials_dir }}/tls/{{ inventory_hostname }}.key"
-  delegate_to: localhost
-  become: false
-
-- name: Create OpenSSL SAN config for node on control node
+- name: Backup CA key to primary node for future node expansion / disaster recovery
   ansible.builtin.copy:
-    dest: "{{ vault_local_credentials_dir }}/tls/{{ inventory_hostname }}.cnf"
+    src: "{{ vault_local_credentials_dir }}/tls/ca.key"
+    dest: "{{ vault_tls_dir }}/ca.key"
+    owner: "{{ vault_user }}"
+    group: "{{ vault_group }}"
     mode: '0600'
-    content: |
-      [req]
-      default_bits = 2048
-      prompt = no
-      default_md = sha256
-      distinguished_name = dn
-      req_extensions = req_ext
+  when: inventory_hostname == vault_primary_node
 
-      [dn]
-      C = US
-      ST = State
-      L = City
-      O = Infrastructure
-      OU = Security
-      CN = {{ inventory_hostname }}
+- name: Issue TLS certificate for new nodes
+  when: not existing_node_cert.stat.exists
+  block:
+    - name: Generate private key for node on control node
+      ansible.builtin.command:
+        cmd: "openssl genrsa -out {{ vault_local_credentials_dir }}/tls/{{ inventory_hostname }}.key 2048"
+        creates: "{{ vault_local_credentials_dir }}/tls/{{ inventory_hostname }}.key"
+      delegate_to: localhost
+      become: false
 
-      [req_ext]
-      subjectAltName = @alt_names
+    - name: Create OpenSSL SAN config for node on control node
+      ansible.builtin.copy:
+        dest: "{{ vault_local_credentials_dir }}/tls/{{ inventory_hostname }}.cnf"
+        mode: '0600'
+        content: |
+          [req]
+          default_bits = 2048
+          prompt = no
+          default_md = sha256
+          distinguished_name = dn
+          req_extensions = req_ext
 
-      [alt_names]
-      DNS.1 = {{ inventory_hostname }}
-      DNS.2 = localhost
-      DNS.3 = vault.internal
-      IP.1 = 127.0.0.1
-      IP.2 = {{ ansible_host }}
-  delegate_to: localhost
-  become: false
+          [dn]
+          C = US
+          ST = State
+          L = City
+          O = Infrastructure
+          OU = Security
+          CN = {{ inventory_hostname }}
 
-- name: Generate CSR for node on control node
-  ansible.builtin.command:
-    cmd: >
-      openssl req -new
-      -key {{ vault_local_credentials_dir }}/tls/{{ inventory_hostname }}.key
-      -out {{ vault_local_credentials_dir }}/tls/{{ inventory_hostname }}.csr
-      -config {{ vault_local_credentials_dir }}/tls/{{ inventory_hostname }}.cnf
-    creates: "{{ vault_local_credentials_dir }}/tls/{{ inventory_hostname }}.csr"
-  delegate_to: localhost
-  become: false
+          [req_ext]
+          subjectAltName = @alt_names
 
-- name: Sign node certificate with Root CA on control node
-  ansible.builtin.command:
-    cmd: >
-      openssl x509 -req
-      -in {{ vault_local_credentials_dir }}/tls/{{ inventory_hostname }}.csr
-      -CA {{ vault_local_credentials_dir }}/tls/ca.crt
-      -CAkey {{ vault_local_credentials_dir }}/tls/ca.key
-      -CAcreateserial
-      -out {{ vault_local_credentials_dir }}/tls/{{ inventory_hostname }}.crt
-      -days {{ pki_cert_validity_days }}
-      -sha256
-      -extfile {{ vault_local_credentials_dir }}/tls/{{ inventory_hostname }}.cnf
-      -extensions req_ext
-    creates: "{{ vault_local_credentials_dir }}/tls/{{ inventory_hostname }}.crt"
-  delegate_to: localhost
-  become: false
+          [alt_names]
+          DNS.1 = {{ inventory_hostname }}
+          DNS.2 = localhost
+          DNS.3 = vault.internal
+          IP.1 = 127.0.0.1
+          IP.2 = {{ ansible_host }}
+      delegate_to: localhost
+      become: false
+
+    - name: Generate CSR for node on control node
+      ansible.builtin.command:
+        cmd: >
+          openssl req -new
+          -key {{ vault_local_credentials_dir }}/tls/{{ inventory_hostname }}.key
+          -out {{ vault_local_credentials_dir }}/tls/{{ inventory_hostname }}.csr
+          -config {{ vault_local_credentials_dir }}/tls/{{ inventory_hostname }}.cnf
+        creates: "{{ vault_local_credentials_dir }}/tls/{{ inventory_hostname }}.csr"
+      delegate_to: localhost
+      become: false
+
+    - name: Sign node certificate with Root CA on control node
+      ansible.builtin.command:
+        cmd: >
+          openssl x509 -req
+          -in {{ vault_local_credentials_dir }}/tls/{{ inventory_hostname }}.csr
+          -CA {{ vault_local_credentials_dir }}/tls/ca.crt
+          -CAkey {{ vault_local_credentials_dir }}/tls/ca.key
+          -CAcreateserial
+          -out {{ vault_local_credentials_dir }}/tls/{{ inventory_hostname }}.crt
+          -days {{ pki_cert_validity_days }}
+          -sha256
+          -extfile {{ vault_local_credentials_dir }}/tls/{{ inventory_hostname }}.cnf
+          -extensions req_ext
+        creates: "{{ vault_local_credentials_dir }}/tls/{{ inventory_hostname }}.crt"
+      delegate_to: localhost
+      become: false
+
+    - name: Distribute node TLS certificate
+      ansible.builtin.copy:
+        src: "{{ vault_local_credentials_dir }}/tls/{{ inventory_hostname }}.crt"
+        dest: "{{ vault_tls_dir }}/vault.crt"
+        owner: "{{ vault_user }}"
+        group: "{{ vault_group }}"
+        mode: '0644'
+
+    - name: Distribute node TLS private key
+      ansible.builtin.copy:
+        src: "{{ vault_local_credentials_dir }}/tls/{{ inventory_hostname }}.key"
+        dest: "{{ vault_tls_dir }}/vault.key"
+        owner: "{{ vault_user }}"
+        group: "{{ vault_group }}"
+        mode: '0600'
 
 - name: Distribute CA certificate to node
   ansible.builtin.copy:
@@ -130,21 +203,3 @@
 - name: Update system CA certificates (RedHat / AlmaLinux)
   ansible.builtin.command: update-ca-trust extract
   when: ansible_facts['os_family'] == 'RedHat' and ca_trust_install_redhat.changed
-
-- name: Distribute node TLS certificate
-  ansible.builtin.copy:
-    src: "{{ vault_local_credentials_dir }}/tls/{{ inventory_hostname }}.crt"
-    dest: "{{ vault_tls_dir }}/vault.crt"
-    owner: "{{ vault_user }}"
-    group: "{{ vault_group }}"
-    mode: '0644'
-  notify: Restart vault
-
-- name: Distribute node TLS private key
-  ansible.builtin.copy:
-    src: "{{ vault_local_credentials_dir }}/tls/{{ inventory_hostname }}.key"
-    dest: "{{ vault_tls_dir }}/vault.key"
-    owner: "{{ vault_user }}"
-    group: "{{ vault_group }}"
-    mode: '0600'
-  notify: Restart vault
