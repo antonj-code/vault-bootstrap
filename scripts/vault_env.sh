@@ -7,7 +7,7 @@ set -euo pipefail
 # Usage: source scripts/vault_env.sh [node_ip]
 # ==============================================================================
 
-TARGET_IP="${1:-192.169.0.201}"
+TARGET_IP="${1:-192.168.0.201}"
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 CA_CERT="${REPO_ROOT}/credentials/tls/ca.crt"
 CREDS_FILE="${REPO_ROOT}/credentials/cluster_credentials.json"

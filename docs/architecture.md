@@ -10,14 +10,14 @@ This document outlines the architecture, distribution logic, quorum behavior, ne
 flowchart TB
     subgraph Physical_Host_1["Standalone Proxmox Host 1 (colossus)"]
         direction TB
-        V1["vm-vault-01 (VM)<br/>Role: Raft Node 1<br/>IP: 192.169.0.201<br/>Port: 8200 / 8201"]
-        V2["vm-vault-02 (VM)<br/>Role: Raft Node 2<br/>IP: 192.169.0.202<br/>Port: 8200 / 8201"]
+        V1["vm-vault-01 (VM)<br/>Role: Raft Node 1<br/>IP: 192.168.0.201<br/>Port: 8200 / 8201"]
+        V2["vm-vault-02 (VM)<br/>Role: Raft Node 2<br/>IP: 192.168.0.202<br/>Port: 8200 / 8201"]
     end
 
     subgraph Physical_Host_2["Standalone Proxmox Host 2 (guardian)"]
         direction TB
-        V3["vm-vault-03 (VM)<br/>Role: Raft Node 3<br/>IP: 192.169.0.203<br/>Port: 8200 / 8201"]
-        VT["vm-vault-transit (LXC)<br/>Role: Auto-Unseal Engine<br/>IP: 192.169.0.200<br/>Port: 8200"]
+        V3["vm-vault-03 (VM)<br/>Role: Raft Node 3<br/>IP: 192.168.0.203<br/>Port: 8200 / 8201"]
+        VT["vm-vault-transit (LXC)<br/>Role: Auto-Unseal Engine<br/>IP: 192.168.0.200<br/>Port: 8200"]
     end
 
     subgraph Management_Host["GitLab Server (gitbox.jnet.lan)"]
@@ -66,12 +66,12 @@ For a 3-node cluster ($N=3$), minimum quorum requires **2 active nodes**.
 ```mermaid
 graph TD
     subgraph Host1["Host 1 (colossus) - 2 Raft Votes"]
-        n1["vm-vault-01 (192.169.0.201)"]
-        n2["vm-vault-02 (192.169.0.202)"]
+        n1["vm-vault-01 (192.168.0.201)"]
+        n2["vm-vault-02 (192.168.0.202)"]
     end
     subgraph Host2["Host 2 (guardian) - 1 Raft Vote + Transit"]
-        n3["vm-vault-03 (192.169.0.203)"]
-        tr["vm-vault-transit (192.169.0.200)"]
+        n3["vm-vault-03 (192.168.0.203)"]
+        tr["vm-vault-transit (192.168.0.200)"]
     end
 
     n1 --- n2
@@ -116,10 +116,10 @@ sequenceDiagram
 
 | Component | Hostname | IP Address | Listening Ports | Target Physical Host |
 |---|---|---|---|---|
-| **Vault Node 1** | `vm-vault-01` | `192.169.0.201` | `8200/tcp` (API), `8201/tcp` (Cluster) | `colossus` (Standalone) |
-| **Vault Node 2** | `vm-vault-02` | `192.169.0.202` | `8200/tcp` (API), `8201/tcp` (Cluster) | `colossus` (Standalone) |
-| **Vault Node 3** | `vm-vault-03` | `192.169.0.203` | `8200/tcp` (API), `8201/tcp` (Cluster) | `guardian` (Standalone) |
-| **Transit Vault** | `vm-vault-transit` | `192.169.0.200` | `8200/tcp` (API) | `guardian` (Standalone) |
+| **Vault Node 1** | `vm-vault-01` | `192.168.0.201` | `8200/tcp` (API), `8201/tcp` (Cluster) | `colossus` (Standalone) |
+| **Vault Node 2** | `vm-vault-02` | `192.168.0.202` | `8200/tcp` (API), `8201/tcp` (Cluster) | `colossus` (Standalone) |
+| **Vault Node 3** | `vm-vault-03` | `192.168.0.203` | `8200/tcp` (API), `8201/tcp` (Cluster) | `guardian` (Standalone) |
+| **Transit Vault** | `vm-vault-transit` | `192.168.0.200` | `8200/tcp` (API) | `guardian` (Standalone) |
 
 ---
 

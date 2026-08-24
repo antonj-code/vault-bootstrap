@@ -49,6 +49,7 @@ resource "proxmox_virtual_environment_vm" "vault_nodes_host1" {
     }
 
     dns {
+      domain  = var.search_domain
       servers = var.dns_servers
     }
 
@@ -121,6 +122,7 @@ resource "proxmox_virtual_environment_vm" "vault_nodes_host2" {
     }
 
     dns {
+      domain  = var.search_domain
       servers = var.dns_servers
     }
 

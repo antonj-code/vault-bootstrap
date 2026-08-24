@@ -10,14 +10,14 @@ This repository contains the complete Infrastructure-as-Code (Terraform / OpenTo
 flowchart TB
     subgraph Host1["Standalone Proxmox Host 1 (colossus)"]
         direction TB
-        V1["vm-vault-01 (VM)<br/>IP: 192.169.0.201<br/>Raft Node 1"]
-        V2["vm-vault-02 (VM)<br/>IP: 192.169.0.202<br/>Raft Node 2"]
+        V1["vm-vault-01 (VM)<br/>IP: 192.168.0.201<br/>Raft Node 1"]
+        V2["vm-vault-02 (VM)<br/>IP: 192.168.0.202<br/>Raft Node 2"]
     end
 
     subgraph Host2["Standalone Proxmox Host 2 (guardian)"]
         direction TB
-        V3["vm-vault-03 (VM)<br/>IP: 192.169.0.203<br/>Raft Node 3"]
-        VT["vm-vault-transit (LXC)<br/>IP: 192.169.0.200<br/>Transit Auto-Unseal Oracle"]
+        V3["vm-vault-03 (VM)<br/>IP: 192.168.0.203<br/>Raft Node 3"]
+        VT["vm-vault-transit (LXC)<br/>IP: 192.168.0.200<br/>Transit Auto-Unseal Oracle"]
     end
 
     subgraph Management["GitLab Server (gitbox.jnet.lan)"]
@@ -46,8 +46,8 @@ flowchart TB
 
 In a 3-node Raft consensus cluster, quorum requires a strict majority of **2 nodes** ($Q = \lfloor 3/2 \rfloor + 1 = 2$). Across your 2 standalone physical hosts:
 
-* **Host 1 (`colossus`)**: `vm-vault-01` (`192.169.0.201`), `vm-vault-02` (`192.169.0.202`) — Cloned from AlmaLinux 9 CIS Level 2 template (ID 1000). Holds 2 Raft voting members.
-* **Host 2 (`guardian`)**: `vm-vault-03` (`192.169.0.203`) [Cloned from Template 1000], `vm-vault-transit` (`192.169.0.200`) [LXC] — Holds 1 Raft voting member + Transit Auto-Unseal oracle.
+* **Host 1 (`colossus`)**: `vm-vault-01` (`192.168.0.201`), `vm-vault-02` (`192.168.0.202`) — Cloned from AlmaLinux 9 CIS Level 2 template (ID 1000). Holds 2 Raft voting members.
+* **Host 2 (`guardian`)**: `vm-vault-03` (`192.168.0.203`) [Cloned from Template 1000], `vm-vault-transit` (`192.168.0.200`) [LXC] — Holds 1 Raft voting member + Transit Auto-Unseal oracle.
 * **Hypervisor Independence**: Because `colossus` and `guardian` are non-clustered standalone hosts, they have complete failure isolation with zero inter-hypervisor dependencies.
 
 ### Failure Scenarios & Mitigations
@@ -89,7 +89,7 @@ vault-bootstrap/
 ├── ansible/                        # Configuration Management & Orchestration
 │   ├── ansible.cfg                 # Performance, SSH, and role settings
 │   ├── inventory/
-│   │   └── hosts.yaml              # Node inventory mapping (192.169.0.200 - 203)
+│   │   └── hosts.yaml              # Node inventory mapping (192.168.0.200 - 203)
 │   ├── group_vars/
 │   │   ├── all.yaml                # Global PKI & Vault versions
 │   │   ├── vault_cluster.yaml      # Raft cluster variables & recovery keys
@@ -143,7 +143,7 @@ ansible-playbook -i inventory/hosts.yaml playbooks/site.yaml
 
 ### 3. CLI Helper
 ```bash
-source scripts/vault_env.sh 192.169.0.201
+source scripts/vault_env.sh 192.168.0.201
 vault status
 vault operator raft list-peers
 ```

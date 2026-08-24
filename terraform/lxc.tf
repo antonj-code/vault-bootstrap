@@ -36,6 +36,7 @@ resource "proxmox_virtual_environment_container" "vault_transit" {
     }
 
     dns {
+      domain  = var.search_domain
       servers = var.dns_servers
     }
 

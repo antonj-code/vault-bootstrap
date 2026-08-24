@@ -62,13 +62,19 @@ variable "network_bridge" {
 variable "network_gateway" {
   description = "Default IPv4 Gateway for VMs and Containers"
   type        = string
-  default     = "192.169.0.1"
+  default     = "192.168.0.1"
 }
 
 variable "dns_servers" {
   description = "List of DNS servers"
   type        = list(string)
-  default     = ["1.1.1.1", "8.8.8.8"]
+  default     = ["192.168.0.168", "192.168.0.127"]
+}
+
+variable "search_domain" {
+  description = "DNS search domain"
+  type        = string
+  default     = "jnet.lan"
 }
 
 variable "ssh_public_keys" {
@@ -135,12 +141,12 @@ variable "host1_vms" {
   default = {
     "vm-vault-01" = {
       vmid        = 501
-      ip_cidr     = "192.169.0.201/24"
+      ip_cidr     = "192.168.0.201/24"
       description = "Main Vault Cluster Node 01 (Raft - colossus)"
     }
     "vm-vault-02" = {
       vmid        = 502
-      ip_cidr     = "192.169.0.202/24"
+      ip_cidr     = "192.168.0.202/24"
       description = "Main Vault Cluster Node 02 (Raft - colossus)"
     }
   }
@@ -157,7 +163,7 @@ variable "host2_vms" {
   default = {
     "vm-vault-03" = {
       vmid        = 503
-      ip_cidr     = "192.169.0.203/24"
+      ip_cidr     = "192.168.0.203/24"
       description = "Main Vault Cluster Node 03 (Raft - guardian)"
     }
   }
@@ -173,7 +179,7 @@ variable "host2_lxcs" {
   default = {
     "vm-vault-transit" = {
       vmid        = 500
-      ip_cidr     = "192.169.0.200/24"
+      ip_cidr     = "192.168.0.200/24"
       description = "Isolated Transit Vault LXC (Auto-Unseal Engine - guardian)"
     }
   }

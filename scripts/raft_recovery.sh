@@ -16,17 +16,17 @@ if [[ "${confirm}" != "y" && "${confirm}" != "Y" ]]; then
   exit 1
 fi
 
-NODE_IP="192.169.0.203"
+NODE_IP="192.168.0.203"
 
 echo "[1/4] Stopping Vault service on vm-vault-03..."
-ssh -o StrictHostKeyChecking=no debian@"${NODE_IP}" "sudo systemctl stop vault"
+ssh -o StrictHostKeyChecking=no almalinux@"${NODE_IP}" "sudo systemctl stop vault"
 
 echo "[2/4] Injecting peers.json recovery definition on vm-vault-03..."
-ssh -o StrictHostKeyChecking=no debian@"${NODE_IP}" "sudo bash -c 'cat << \"EOF\" > /opt/vault/data/raft/peers.json
+ssh -o StrictHostKeyChecking=no almalinux@"${NODE_IP}" "sudo bash -c 'cat << \"EOF\" > /opt/vault/data/raft/peers.json
 [
   {
     \"id\": \"vm-vault-03\",
-    \"address\": \"192.169.0.203:8201\",
+    \"address\": \"192.168.0.203:8201\",
     \"non_voter\": false
   }
 ]
@@ -35,10 +35,10 @@ chown -R vault:vault /opt/vault/data/raft/peers.json
 '"
 
 echo "[3/4] Restarting Vault service on vm-vault-03..."
-ssh -o StrictHostKeyChecking=no debian@"${NODE_IP}" "sudo systemctl start vault"
+ssh -o StrictHostKeyChecking=no almalinux@"${NODE_IP}" "sudo systemctl start vault"
 
 echo "[4/4] Verifying recovery status..."
 sleep 5
-ssh -o StrictHostKeyChecking=no debian@"${NODE_IP}" "VAULT_ADDR=https://127.0.0.1:8200 VAULT_CACERT=/etc/vault.d/tls/ca.crt vault status"
+ssh -o StrictHostKeyChecking=no almalinux@"${NODE_IP}" "VAULT_ADDR=https://127.0.0.1:8200 VAULT_CACERT=/etc/vault.d/tls/ca.crt vault status"
 
 echo "=== Quorum Recovery Completed ==="

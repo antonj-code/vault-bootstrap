@@ -168,11 +168,11 @@ vault:verify:
   script:
     - echo "Executing Vault cluster health check across active nodes..."
     - |
-      for ip in 192.169.0.201 192.169.0.202 192.169.0.203; do
+      for ip in 192.168.0.201 192.168.0.202 192.168.0.203; do
         echo "Querying Node ${ip}:8200..."
         curl -k -s "https://${ip}:8200/v1/sys/health" | jq . || true
       done
-    - echo "Checking Transit Auto-Unseal Node 192.169.0.200:8200..."
-    - curl -k -s "https://192.169.0.200:8200/v1/sys/health" | jq . || true
+    - echo "Checking Transit Auto-Unseal Node 192.168.0.200:8200..."
+    - curl -k -s "https://192.168.0.200:8200/v1/sys/health" | jq . || true
   rules:
     - if: $CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH || $CI_PIPELINE_SOURCE == "web"
