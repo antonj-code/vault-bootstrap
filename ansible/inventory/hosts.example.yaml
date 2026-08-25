@@ -1,0 +1,29 @@
+# ==============================================================================
+# Sample Ansible Inventory for Vault High-Availability Deployment
+# Copy this file to 'hosts.yaml' and customize IP addresses and hostnames
+# ==============================================================================
+all:
+  vars:
+    ansible_user: almalinux
+    ansible_ssh_common_args: '-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null'
+  children:
+    vault_cluster:
+      hosts:
+        vm-vault-01:
+          ansible_host: 192.168.0.201
+          vault_node_id: 501
+          pve_host: colossus
+        vm-vault-02:
+          ansible_host: 192.168.0.202
+          vault_node_id: 502
+          pve_host: colossus
+        vm-vault-03:
+          ansible_host: 192.168.0.203
+          vault_node_id: 503
+          pve_host: guardian
+    vault_transit:
+      hosts:
+        vm-vault-transit:
+          ansible_host: 192.168.0.200
+          vault_node_id: 500
+          pve_host: guardian
