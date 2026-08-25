@@ -61,6 +61,15 @@
       delegate_to: localhost
       become: false
 
+    - name: Save backup copy of cluster credentials on primary node
+      when: not primary_init_check.json.initialized
+      ansible.builtin.copy:
+        content: "{{ cluster_init_raw.stdout }}"
+        dest: "{{ vault_config_dir }}/cluster_credentials.json"
+        owner: root
+        group: root
+        mode: '0600'
+
 # --- Automatic Fallback Unseal Using Recovery Keys (If Transit Was Wiped/Rebuilt) ---
 - name: Query node seal and initialization status
   ansible.builtin.uri:
@@ -80,6 +89,39 @@
   delegate_to: localhost
   become: false
   register: cluster_creds_stat
+
+- name: Recover cluster credentials from primary node if missing on control node
+  when: not (cluster_creds_stat.stat.exists | default(false))
+  block:
+    - name: Check if cluster credentials backup exists on primary node
+      ansible.builtin.stat:
+        path: "{{ vault_config_dir }}/cluster_credentials.json"
+      delegate_to: "{{ vault_primary_node | default('vm-vault-01') }}"
+      register: primary_creds_backup_stat
+      ignore_errors: true
+
+    - name: Slurp cluster credentials from primary node
+      ansible.builtin.slurp:
+        src: "{{ vault_config_dir }}/cluster_credentials.json"
+      delegate_to: "{{ vault_primary_node | default('vm-vault-01') }}"
+      register: slurped_primary_creds
+      when: primary_creds_backup_stat.stat.exists | default(false)
+
+    - name: Write recovered cluster credentials to control node
+      ansible.builtin.copy:
+        content: "{{ slurped_primary_creds.content | b64decode }}"
+        dest: "{{ vault_local_credentials_dir }}/cluster_credentials.json"
+        mode: '0600'
+      delegate_to: localhost
+      become: false
+      when: slurped_primary_creds is defined and slurped_primary_creds.content is defined
+
+    - name: Re-check cluster credentials stat on control node
+      ansible.builtin.stat:
+        path: "{{ vault_local_credentials_dir }}/cluster_credentials.json"
+      delegate_to: localhost
+      become: false
+      register: cluster_creds_stat
 
 - name: Unseal Primary Node using Shamir recovery keys if sealed after Transit replacement
   when:

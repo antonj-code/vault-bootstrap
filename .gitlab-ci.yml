@@ -136,6 +136,10 @@ terraform:apply:
 ansible:configure:
   stage: configure
   image: alpine/ansible:2.21.0
+  cache:
+    key: "vault-credentials-cache"
+    paths:
+      - credentials/
   dependencies:
     - terraform:apply
   before_script:
