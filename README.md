@@ -90,8 +90,9 @@ vault-bootstrap/
 │   ├── ansible.cfg                 # Performance, SSH, and role settings
 │   ├── inventory/
 │   │   ├── hosts.yaml              # Node inventory mapping (192.168.0.200 - 203)
+│   │   ├── hosts.example.yaml      # Sample inventory template for external environments
 │   │   └── group_vars/             # Host group variable scoping
-│   │       ├── all.yaml            # Global PKI, versions, sentinel marker definition
+│   │       ├── all.yaml            # Global PKI, domain, versions, sentinel marker
 │   │       ├── vault_cluster.yaml  # Raft cluster variables & recovery keys
 │   │       └── vault_transit.yaml  # Transit Auto-Unseal parameters
 │   ├── roles/
