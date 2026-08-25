@@ -61,27 +61,10 @@
       delegate_to: localhost
       become: false
 
-    - name: Save backup copy of cluster credentials on primary node
-      when: not primary_init_check.json.initialized
-      ansible.builtin.copy:
-        content: "{{ cluster_init_raw.stdout }}"
-        dest: "{{ vault_config_dir }}/cluster_credentials.json"
-        owner: root
-        group: root
-        mode: '0600'
-
-# --- Automatic Fallback Unseal Using Recovery Keys (If Transit Was Wiped/Rebuilt) ---
-- name: Query node seal and initialization status
-  ansible.builtin.uri:
-    url: "https://127.0.0.1:{{ vault_api_port }}/v1/sys/health"
-    ca_path: "{{ vault_tls_dir }}/ca.crt"
-    method: GET
-    status_code: [200, 429, 472, 473, 501, 503]
-    return_content: true
-  register: node_health_check
-  retries: 5
-  delay: 2
-  until: node_health_check.status in [200, 429, 472, 473, 501, 503]
+- name: Wait for standby nodes to auto-join Raft cluster
+  ansible.builtin.pause:
+    seconds: 10
+  when: inventory_hostname == vault_primary_node
 
 - name: Check if cluster credentials exist on control node
   ansible.builtin.stat:
@@ -89,70 +72,6 @@
   delegate_to: localhost
   become: false
   register: cluster_creds_stat
-
-- name: Recover cluster credentials from primary node if missing on control node
-  when: not (cluster_creds_stat.stat.exists | default(false))
-  block:
-    - name: Check if cluster credentials backup exists on primary node
-      ansible.builtin.stat:
-        path: "{{ vault_config_dir }}/cluster_credentials.json"
-      delegate_to: "{{ vault_primary_node | default('vm-vault-01') }}"
-      register: primary_creds_backup_stat
-      ignore_errors: true
-
-    - name: Slurp cluster credentials from primary node
-      ansible.builtin.slurp:
-        src: "{{ vault_config_dir }}/cluster_credentials.json"
-      delegate_to: "{{ vault_primary_node | default('vm-vault-01') }}"
-      register: slurped_primary_creds
-      when: primary_creds_backup_stat.stat.exists | default(false)
-
-    - name: Write recovered cluster credentials to control node
-      ansible.builtin.copy:
-        content: "{{ slurped_primary_creds.content | b64decode }}"
-        dest: "{{ vault_local_credentials_dir }}/cluster_credentials.json"
-        mode: '0600'
-      delegate_to: localhost
-      become: false
-      when: slurped_primary_creds is defined and slurped_primary_creds.content is defined
-
-    - name: Re-check cluster credentials stat on control node
-      ansible.builtin.stat:
-        path: "{{ vault_local_credentials_dir }}/cluster_credentials.json"
-      delegate_to: localhost
-      become: false
-      register: cluster_creds_stat
-
-- name: Unseal Primary Node using Shamir recovery keys if sealed after Transit replacement
-  when:
-    - inventory_hostname == vault_primary_node
-    - node_health_check.json.initialized | default(false)
-    - node_health_check.json.sealed | default(false)
-    - cluster_creds_stat.stat.exists | default(false)
-  block:
-    - name: Load recovery keys from credentials file
-      ansible.builtin.set_fact:
-        cluster_recovery_keys: >-
-          {{
-            ((lookup('file', vault_local_credentials_dir + '/cluster_credentials.json') | from_json).recovery_keys_b64
-            | default((lookup('file', vault_local_credentials_dir + '/cluster_credentials.json') | from_json).unseal_keys_b64 | default([])))
-          }}
-
-    - name: Apply Shamir recovery keys to unseal primary node
-      ansible.builtin.command:
-        cmd: "{{ vault_bin }} operator unseal {{ item }}"
-      environment:
-        VAULT_ADDR: "https://127.0.0.1:{{ vault_api_port }}"
-        VAULT_CACERT: "{{ vault_tls_dir }}/ca.crt"
-      loop: "{{ cluster_recovery_keys[:vault_recovery_threshold | default(3)] }}"
-      no_log: true
-      register: primary_unseal_res
-      failed_when: false
-      changed_when: primary_unseal_res.rc == 0
-
-- name: Wait for standby nodes to auto-join Raft cluster
-  ansible.builtin.pause:
-    seconds: 10
   when: inventory_hostname == vault_primary_node
 
 - name: Validate Raft cluster leader state via HTTP API
@@ -191,18 +110,6 @@
     - name: Display Raft cluster peer details
       ansible.builtin.debug:
         msg: "Active Raft Peers: {{ (raft_peers_raw.stdout | from_json).data.config.servers }}"
-
-- name: Wait for cluster node to become unsealed and healthy
-  ansible.builtin.uri:
-    url: "https://127.0.0.1:{{ vault_api_port }}/v1/sys/health"
-    ca_path: "{{ vault_tls_dir }}/ca.crt"
-    method: GET
-    status_code: [200, 429]
-    return_content: true
-  register: final_cluster_health
-  retries: 20
-  delay: 3
-  until: final_cluster_health.status in [200, 429] and not (final_cluster_health.json.sealed | default(true))
 
 - name: Create bootstrap sentinel marker file on cluster node
   ansible.builtin.file:
