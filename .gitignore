@@ -2,10 +2,12 @@
 **/.terraform/*
 *.tfstate
 *.tfstate.*
+*.tfplan
+*.plan
 crash.log
 crash.*.log
 *.tfvars
-!terraform.tfvars.example
+!terraform/terraform.tfvars.example
 override.tf
 override.tf.json
 *_override.tf
@@ -13,17 +15,33 @@ override.tf.json
 .terraformrc
 terraform.rc
 
+# Packer
+packer_cache/
+*.pkrvars.hcl
+!packer/pkrvars.example.hcl
+*.iso
+
 # Ansible
 *.retry
 ansible.log
 .ansible/
 
-# Generated Vault Credentials and TLS Private Keys
+# Generated Vault Credentials and TLS Certificates/Keys
 credentials/
 *.key
 *.pem
 *.pfx
 *.p12
+*.crt
+*.csr
+*.cert
+autounseal_token.txt
+*cluster_credentials*.json
+*transit_credentials*.json
+
+# Environment / Secret Files
+.env
+.env.*
 
 # OS / Editor files
 .DS_Store
