@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-set -euo pipefail
 
 # ==============================================================================
 # Vault Environment Setup Helper
