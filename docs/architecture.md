@@ -88,6 +88,21 @@ graph TD
 | **Inter-Host Network Split** | Host 1 (2 nodes) vs Host 2 (1 node) | Host 1 retains quorum (2/3); Host 2 is isolated (1/3) | Host 1 cannot reach Transit; Host 2 has Transit | Host 1 continues serving clients. Host 2 steps down. Split-brain is prevented because Raft leader election strictly requires $\ge 2$ votes. |
 | **Transit VM Fails** | 3 / 3 | **MAINTAINED** | Offline | **Zero runtime read/write disruption.** Existing in-memory barrier keys are unaffected. Restart `vm-vault-transit` VM when convenient. |
 
+### 2.4 The 2-Physical-Server Quorum Constraint & Scaling to 3 Domains
+
+A fundamental law of Raft consensus ($Q = \lfloor N/2 \rfloor + 1$) across **only 2 physical hypervisors** is the **Majority Host Asymmetry**:
+
+* **Why increasing node count from 3 to 5 does not eliminate this**:
+  * In a 5-node cluster across 2 hosts, nodes must be split unevenly (3 on one host, 2 on the other).
+  * 5-node quorum requires **3 votes**. If the host holding 3 nodes dies, only 2 nodes survive on the other host ($2 < 3$), causing quorum to be lost.
+* **The Operational Reality**: With 2 physical hosts, the cluster can always survive the failure of the *minority* host (`guardian`), but the loss of the *majority* host (`colossus`) will require bringing Host 1 back online or executing [`scripts/raft_recovery.sh`](../scripts/raft_recovery.sh) to force single-node quorum.
+* **Path to 100% Symmetrical Failure Tolerance (3rd Failure Domain)**:
+  * To survive the loss of **either** physical host automatically, a **3rd failure domain** is required (e.g., adding a 3rd Proxmox host, or deploying a lightweight 1-core voting witness node in a cloud VPC / Raspberry Pi):
+    * `colossus` (Host 1): 2 voting nodes
+    * `guardian` (Host 2): 2 voting nodes
+    * `witness` (Domain 3): 1 tie-breaker voter node
+    * *Result*: If either `colossus` or `guardian` suffers a complete power loss, the surviving host (2 votes) + witness (1 vote) = **3 of 5 votes** $\rightarrow$ **Quorum holds 100% of the time with zero downtime.**
+
 ---
 
 ## 3. Transit Auto-Unseal Architecture
