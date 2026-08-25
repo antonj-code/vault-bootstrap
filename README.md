@@ -61,6 +61,30 @@ In a 3-node Raft consensus cluster, quorum requires a strict majority of **2 nod
 
 ---
 
+## 📐 Architectural Rationale & Engineering Decisions
+
+This project demonstrates how deep Linux systems administration principles are codified into modern Infrastructure-as-Code and declarative GitOps pipelines.
+
+### 1. Asymmetrical Raft Quorum Across Dual Hypervisors
+* **The Challenge**: Standard high-availability blueprints mandate $\ge 3$ physical hypervisors. In real-world edge environments and homelabs, physical hardware is often constrained to 2 nodes.
+* **The Solution**: Rather than implementing complex hypervisor clustering (Corosync/pmxcfs) which introduces split-brain risks, `colossus` and `guardian` operate as **independent, standalone hypervisors**. Raft consensus ($N=3, Q=2$) is established purely at the application layer: Host 1 holds 2 voting members, Host 2 holds 1 voting member + the Transit unseal oracle. This guarantees zero downtime if Host 2 fails and eliminates cross-hypervisor locking.
+
+### 2. Zero-Touch Auto-Unseal Without Cloud KMS
+* **The Challenge**: Traditional open-source Vault requires human key custodians to enter Shamir unseal shards manually on every reboot, creating unacceptable downtime during kernel upgrades or automated node repaving.
+* **The Solution**: We deploy an isolated Vault VM (`vm-vault-transit`) running the Transit Secrets Engine. A custom systemd unit (`vault-transit-unseal.service`) automatically unseals Transit on boot in 1 second, enabling hands-free auto-unsealing for the main Raft cluster without commercial cloud KMS or Vault Enterprise licenses.
+
+### 3. Sentinel-Based Idempotency & Zero-Drift Single Node Recovery
+* **The Challenge**: Greenfield deployments (Day 1) are straightforward, but rebuilding a single dead node (Day 2) frequently triggers pipeline failures—such as overwriting surviving Root CAs, regenerating certificates across healthy nodes, or cycling surviving peers.
+* **The Solution**:
+  * **Sentinel Marker Discovery**: Ansible checks for `/etc/vault.d/.vault_bootstrapped`. When rebuilding a single node (e.g., `vm-vault-03`), Ansible dynamically discovers surviving peers, slurps the existing Root CA, issues certificates *only* for the replacement node, and rejoins the Raft leader without disrupting active quorum.
+  * **Terraform Lifecycle Locks**: Configured `lifecycle { ignore_changes = [clone] }` to ensure Proxmox never reboots or modifies healthy running VMs during partial Terraform applies.
+
+### 4. Linux Kernel Memory Locking (`mlock`) & CIS Hardening
+* **The Challenge**: In security-critical workloads, unencrypted process memory pages dumped to swap space can expose master encryption keys.
+* **The Solution**: All VMs are cloned from a minimal **AlmaLinux 9 CIS Level 2** template. Vault binary is granted `cap_ipc_lock=+ep`, systemd is locked with `LimitMEMLOCK=infinity`, and `disable_mlock = false` is enforced. SELinux file contexts (`bin_t`, `var_lib_t`) and mutual TLS (mTLS on port 8201) are applied declaratively.
+
+---
+
 ## 📁 Repository Structure
 
 ```
