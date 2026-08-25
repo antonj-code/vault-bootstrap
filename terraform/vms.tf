@@ -29,6 +29,7 @@ resource "proxmox_virtual_environment_vm" "vault_nodes_host1" {
   }
 
   started = true
+  reboot  = false
 
   agent {
     enabled = true
@@ -74,7 +75,10 @@ resource "proxmox_virtual_environment_vm" "vault_nodes_host1" {
   serial_device {}
 
   lifecycle {
-    ignore_changes = [clone]
+    ignore_changes = [
+      clone,
+      initialization
+    ]
   }
 }
 
@@ -109,6 +113,7 @@ resource "proxmox_virtual_environment_vm" "vault_nodes_host2" {
   }
 
   started = true
+  reboot  = false
 
   agent {
     enabled = true
@@ -154,7 +159,10 @@ resource "proxmox_virtual_environment_vm" "vault_nodes_host2" {
   serial_device {}
 
   lifecycle {
-    ignore_changes = [clone]
+    ignore_changes = [
+      clone,
+      initialization
+    ]
   }
 }
 
@@ -189,6 +197,7 @@ resource "proxmox_virtual_environment_vm" "vault_transit" {
   }
 
   started = true
+  reboot  = false
 
   agent {
     enabled = true
@@ -234,6 +243,9 @@ resource "proxmox_virtual_environment_vm" "vault_transit" {
   serial_device {}
 
   lifecycle {
-    ignore_changes = [clone]
+    ignore_changes = [
+      clone,
+      initialization
+    ]
   }
 }
