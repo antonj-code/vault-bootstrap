@@ -81,8 +81,10 @@
   become: false
   register: cluster_creds_stat
 
-- name: Unseal node using Shamir recovery keys if sealed
+- name: Unseal Primary Node using Shamir recovery keys if sealed after Transit replacement
   when:
+    - inventory_hostname == vault_primary_node
+    - node_health_check.json.initialized | default(false)
     - node_health_check.json.sealed | default(false)
     - cluster_creds_stat.stat.exists | default(false)
   block:
@@ -94,7 +96,7 @@
             | default((lookup('file', vault_local_credentials_dir + '/cluster_credentials.json') | from_json).unseal_keys_b64 | default([])))
           }}
 
-    - name: Apply Shamir recovery keys to unseal node
+    - name: Apply Shamir recovery keys to unseal primary node
       ansible.builtin.command:
         cmd: "{{ vault_bin }} operator unseal {{ item }}"
       environment:
@@ -102,7 +104,9 @@
         VAULT_CACERT: "{{ vault_tls_dir }}/ca.crt"
       loop: "{{ cluster_recovery_keys[:vault_recovery_threshold | default(3)] }}"
       no_log: true
-      changed_when: true
+      register: primary_unseal_res
+      failed_when: false
+      changed_when: primary_unseal_res.rc == 0
 
 - name: Wait for standby nodes to auto-join Raft cluster
   ansible.builtin.pause:
@@ -118,7 +122,7 @@
     status_code: [200]
     return_content: true
   register: cluster_leader_status
-  retries: 12
+  retries: 15
   delay: 3
   until: cluster_leader_status.status == 200 and ((cluster_leader_status.json.leader_address | default('') | length > 0) or (cluster_leader_status.json.is_self | default(false)))
 
@@ -145,6 +149,18 @@
     - name: Display Raft cluster peer details
       ansible.builtin.debug:
         msg: "Active Raft Peers: {{ (raft_peers_raw.stdout | from_json).data.config.servers }}"
+
+- name: Wait for cluster node to become unsealed and healthy
+  ansible.builtin.uri:
+    url: "https://127.0.0.1:{{ vault_api_port }}/v1/sys/health"
+    ca_path: "{{ vault_tls_dir }}/ca.crt"
+    method: GET
+    status_code: [200, 429]
+    return_content: true
+  register: final_cluster_health
+  retries: 20
+  delay: 3
+  until: final_cluster_health.status in [200, 429] and not (final_cluster_health.json.sealed | default(true))
 
 - name: Create bootstrap sentinel marker file on cluster node
   ansible.builtin.file:
