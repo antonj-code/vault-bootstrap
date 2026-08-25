@@ -74,12 +74,7 @@ resource "proxmox_virtual_environment_vm" "vault_nodes_host1" {
   serial_device {}
 
   lifecycle {
-    ignore_changes = [
-      clone,
-      initialization,
-      network_device,
-      disk
-    ]
+    ignore_changes = all
   }
 }
 
@@ -159,12 +154,7 @@ resource "proxmox_virtual_environment_vm" "vault_nodes_host2" {
   serial_device {}
 
   lifecycle {
-    ignore_changes = [
-      clone,
-      initialization,
-      network_device,
-      disk
-    ]
+    ignore_changes = all
   }
 }
 
@@ -244,11 +234,6 @@ resource "proxmox_virtual_environment_vm" "vault_transit" {
   serial_device {}
 
   lifecycle {
-    ignore_changes = [
-      clone,
-      initialization,
-      network_device,
-      disk
-    ]
+    ignore_changes = all
   }
 }
