@@ -29,7 +29,6 @@ resource "proxmox_virtual_environment_vm" "vault_nodes_host1" {
   }
 
   started             = true
-  reboot_after_update = false
 
   agent {
     enabled = true
@@ -115,7 +114,6 @@ resource "proxmox_virtual_environment_vm" "vault_nodes_host2" {
   }
 
   started             = true
-  reboot_after_update = false
 
   agent {
     enabled = true
@@ -201,7 +199,6 @@ resource "proxmox_virtual_environment_vm" "vault_transit" {
   }
 
   started             = true
-  reboot_after_update = false
 
   agent {
     enabled = true
