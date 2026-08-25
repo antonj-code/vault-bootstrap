@@ -146,7 +146,34 @@ vault token revoke <INITIAL_ROOT_TOKEN>
 
 ---
 
-## 5. Daily CLI Usage with Helper Scripts
+## 5. Transit Server Recovery & Snapshot Strategy (Homelab Operations)
+
+In an auto-unsealed Vault architecture, the Transit Secrets Engine acts as the **Root of Trust**. The encryption key inside `/opt/vault/data` on `vm-vault-transit` wraps the master keys of `vm-vault-01`, `02`, and `03`.
+
+### 5.1 Why Snapshots are Critical for Transit Recovery
+If the Transit VM is destroyed and recreated with an empty disk, it generates a *new* encryption key that cannot decrypt the existing cluster data. Therefore, recovering Transit requires preserving or restoring its original key ring.
+
+### 5.2 Homelab Recovery Options
+
+1. **Proxmox VM Snapshots / Backups (Recommended for Homelabs)**:
+   * **Proactive Step**: After initial deployment, right-click `vm-vault-transit` (VM ID 500) in the Proxmox web GUI $\rightarrow$ **Take Snapshot** (or include it in a scheduled Proxmox backup job to local storage or NAS).
+   * **Recovery**: If `vm-vault-transit` is ever corrupted or deleted, click **Restore** in Proxmox. The VM boots up, the self-healing systemd service (`vault-transit-unseal.service`) auto-unseals it in 1 second, and the main cluster immediately unseals.
+2. **Local `/opt/vault/data` Archive**:
+   * Create a simple tarball backup of Transit storage:
+     ```bash
+     ssh almalinux@192.168.0.200 "sudo tar -czvf /tmp/transit-data.tar.gz /opt/vault/data"
+     ```
+   * If rebuilding the VM via Terraform, restore this archive before starting Vault.
+3. **Full Greenfield Re-deployment**:
+   * If you want to start fresh with a new Transit key, destroy all 4 VMs (`500`, `501`, `502`, `503`) in Proxmox and run the pipeline to initialize the cluster and Transit together.
+
+> [!NOTE]
+> **Project Scope & Future Roadmap**:
+> Fully automated scheduled snapshot pipelines (e.g., cron-based S3 streaming of `vault operator raft snapshot` and Proxmox Backup Server API automation) were intentionally kept **out of scope** for this initial bootstrap project. Automated backup and restore orchestration will be implemented in a future dedicated phase/project.
+
+---
+
+## 6. Daily CLI Usage with Helper Scripts
 
 We provide [`scripts/vault_env.sh`](../scripts/vault_env.sh) for quick workstation access:
 
@@ -166,7 +193,7 @@ vault status
 
 ---
 
-## 6. Zero-Trace Artifact Hygiene (Optional)
+## 7. Zero-Trace Artifact Hygiene (Optional)
 
 Once your recovery keys and certificates are safely backed up in your enterprise vault:
 
