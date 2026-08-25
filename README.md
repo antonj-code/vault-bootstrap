@@ -136,42 +136,45 @@ vault-bootstrap/
 
 ---
 
-## 🚀 Deployment Guide
+## 🚀 Deployment Guide (GitOps Pipeline)
 
-For full instructions on configuring `gitbox.jnet.lan` and Proxmox API tokens, see [docs/gitlab-setup.md](docs/gitlab-setup.md).
+The primary and fully validated deployment method is automated end-to-end via the **GitLab CI/CD GitOps Pipeline**.
 
-### 1. GitLab CI / GitOps Automated Pipeline (Recommended)
+For complete setup instructions (Proxmox API tokens and runner setup), see **[docs/gitlab-setup.md](docs/gitlab-setup.md)**.
 
-1. **Configure CI/CD Variables** in your GitLab project (`Settings` > `CI/CD` > `Variables`):
-   * `TF_VAR_pve_host_1_endpoint`: API URL of `colossus` (e.g. `https://colossus.jnet.lan:8006/`).
-   * `TF_VAR_pve_host_1_api_token`: API Token on `colossus` (`terraform-ci@pve!gitlab-runner=...`).
-   * `TF_VAR_pve_host_2_endpoint`: API URL of `guardian` (e.g. `https://guardian.jnet.lan:8006/`).
-   * `TF_VAR_pve_host_2_api_token`: API Token on `guardian` (`terraform-ci@pve!gitlab-runner=...`).
-   * `TF_VAR_ssh_public_keys`: Array containing your public SSH key.
-   * `SSH_PRIVATE_KEY`: ED25519 private key for Ansible access.
-2. **Push to `main`**:
-   * Pipeline automatically triggers `terraform:apply`, runs `ansible:configure`, and validates health.
+### 1. Configure GitLab CI/CD Variables
+In your GitLab repository (**Settings** $\rightarrow$ **CI/CD** $\rightarrow$ **Variables**), configure the following:
 
-### 2. Manual / Local Execution
+| Variable | Masked | Description |
+|---|---|---|
+| `TF_VAR_pve_host_1_endpoint` | No | API URL for Host 1 (e.g. `https://colossus.jnet.lan:8006/`) |
+| `TF_VAR_pve_host_1_api_token` | **Yes** | API token secret on `colossus` |
+| `TF_VAR_pve_host_2_endpoint` | No | API URL for Host 2 (e.g. `https://guardian.jnet.lan:8006/`) |
+| `TF_VAR_pve_host_2_api_token` | **Yes** | API token secret on `guardian` |
+| `TF_VAR_ssh_public_keys` | No | Array with your public SSH key (`["ssh-ed25519 ..."]`) |
+| `SSH_PRIVATE_KEY` | No | Private SSH key (ED25519) for Ansible node configuration |
 
-```bash
-cd terraform
-cp terraform.tfvars.example terraform.tfvars
-# Fill in your colossus and guardian endpoints, tokens, and SSH keys in terraform.tfvars
+### 2. Trigger the Pipeline
+Push a commit to `main` (or click **Run pipeline** in GitLab). The pipeline automatically executes:
+1. **`validate`**: Syntax & lint verification (`terraform validate`, `ansible-playbook --syntax-check`).
+2. **`plan`**: Generates and inspects the Terraform execution plan with remote state locks.
+3. **`apply`**: Provisions VMs on `colossus` and `guardian` and assigns them to `backup_pool`.
+4. **`configure`**: Distributes mTLS certs, initialises Transit, auto-unseals, and joins Raft nodes.
+5. **`verify`**: Runs automated cluster health checks against `/v1/sys/health`.
 
-terraform init
-terraform apply
+---
 
-cd ../ansible
-ansible-playbook -i inventory/hosts.yaml playbooks/site.yaml
-```
+## 🛠️ Operational & Disaster Recovery Utilities
 
-### 3. CLI Helper
-```bash
-source scripts/vault_env.sh 192.168.0.201
-vault status
-vault operator raft list-peers
-```
+The `scripts/` directory provides helper utilities for cluster maintenance:
+
+* **[`scripts/vault_env.sh`](scripts/vault_env.sh)**: Sets up your local shell environment with `VAULT_ADDR`, `VAULT_CACERT`, and token for CLI management:
+  ```bash
+  source scripts/vault_env.sh 192.168.0.201
+  vault status
+  vault operator raft list-peers
+  ```
+* **[`scripts/raft_recovery.sh`](scripts/raft_recovery.sh)**: Disaster recovery script for catastrophic failure scenarios (forces single-node quorum promotion on `vm-vault-03` if `colossus` is permanently destroyed).
 
 ---
 
