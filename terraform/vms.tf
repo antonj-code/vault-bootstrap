@@ -28,7 +28,7 @@ resource "proxmox_virtual_environment_vm" "vault_nodes_host1" {
     floating  = var.vault_vm_config.memory
   }
 
-  started             = true
+  started = true
 
   agent {
     enabled = true
@@ -108,7 +108,7 @@ resource "proxmox_virtual_environment_vm" "vault_nodes_host2" {
     floating  = var.vault_vm_config.memory
   }
 
-  started             = true
+  started = true
 
   agent {
     enabled = true
@@ -188,7 +188,7 @@ resource "proxmox_virtual_environment_vm" "vault_transit" {
     floating  = var.vault_transit_config.memory
   }
 
-  started             = true
+  started = true
 
   agent {
     enabled = true
