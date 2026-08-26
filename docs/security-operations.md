@@ -127,7 +127,7 @@ vault policy write admin admin-policy.hcl
 vault auth enable userpass
 
 # Create your personal admin account
-vault write auth/userpass/users/ajensen \
+vault write auth/userpass/users/<admin_username> \
   password="<STRONG_PASSWORD>" \
   policies="admin" \
   ttl="8h"
@@ -135,7 +135,7 @@ vault write auth/userpass/users/ajensen \
 
 ### Step 3: Verify Login with Named Account
 ```bash
-vault login -method=userpass username=ajensen
+vault login -method=userpass username=<admin_username>
 ```
 
 ### Step 4: Revoke the Initial Root Token
@@ -182,7 +182,7 @@ We provide [`scripts/vault_env.sh`](../scripts/vault_env.sh) for quick workstati
 source scripts/vault_env.sh
 
 # Log into the cluster
-vault login -method=userpass username=ajensen
+vault login -method=userpass username=<admin_username>
 
 # Check Raft peer status
 vault operator raft list-peers
