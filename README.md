@@ -1,6 +1,6 @@
 # Vault Bootstrap: 3-Node HA Cluster + Transit Auto-Unseal VM on Proxmox VE
 
-This repository contains the complete Infrastructure-as-Code (Terraform / OpenTofu), Configuration Management (Ansible), and GitOps CI/CD pipeline (`.gitlab-ci.yml`) to deploy a production-grade, highly available **3-Node HashiCorp Vault Cluster** (Raft Integrated Storage) with an isolated **Transit Auto-Unseal Vault VM** across **2x Standalone Proxmox VE physical hosts: `colossus` and `guardian`**.
+This repo has everything needed to stand up a highly available 3-node HashiCorp Vault cluster (using Raft storage) plus a separate Transit Vault for auto-unsealing — all as code. It covers the infrastructure (Terraform / OpenTofu), the configuration (Ansible), and the GitOps CI/CD pipeline (`.gitlab-ci.yml`) that ties it all together, running across two standalone Proxmox VE hosts: **`colossus`** and **`guardian`**.
 
 ---
 
@@ -44,44 +44,48 @@ flowchart TB
 
 ## ⚖️ Hardware Distribution & Quorum Logic
 
-In a 3-node Raft consensus cluster, quorum requires a strict majority of **2 nodes** ($Q = \lfloor 3/2 \rfloor + 1 = 2$). Across your 2 standalone physical hosts:
+A 3-node Raft cluster needs a strict majority — 2 out of 3 nodes — to keep working ($Q = \lfloor 3/2 \rfloor + 1 = 2$). Here's how those 3 nodes, plus the Transit VM, are split across the 2 physical hosts:
 
-* **Host 1 (`colossus`)**: `vm-vault-01` (`192.168.0.201`), `vm-vault-02` (`192.168.0.202`) — Cloned from AlmaLinux 9 CIS Level 2 template (ID 1000). Holds 2 Raft voting members.
-* **Host 2 (`guardian`)**: `vm-vault-03` (`192.168.0.203`) [Cloned from Template 1000], `vm-vault-transit` (`192.168.0.200`) [Cloned from Template 1000] — Holds 1 Raft voting member + Transit Auto-Unseal oracle.
-* **Hypervisor Independence**: Because `colossus` and `guardian` are non-clustered standalone hosts, they have complete failure isolation with zero inter-hypervisor dependencies.
+* **Host 1 (`colossus`)** runs `vm-vault-01` (`192.168.0.201`) and `vm-vault-02` (`192.168.0.202`), both cloned from the AlmaLinux 9 CIS Level 2 template (ID 1000). That's 2 of the 3 Raft votes.
+* **Host 2 (`guardian`)** runs `vm-vault-03` (`192.168.0.203`) and `vm-vault-transit` (`192.168.0.200`), also cloned from Template 1000. That's the 3rd Raft vote, plus the Transit auto-unseal oracle.
+* **Hypervisor independence**: `colossus` and `guardian` are standalone hosts with no clustering between them, so a problem on one can never drag the other down.
 
 ### Failure Scenarios & Mitigations
 
 | Failure Scenario | Active Raft Nodes | Quorum State | Cluster Impact | Operational Action |
 |---|---|---|---|---|
-| **Host 2 (`guardian`) Fails** | 2 / 3 (`vm-vault-01`, `vm-vault-02`) | **QUORUM MAINTAINED** | **Zero downtime.** Cluster continues read/write operations seamlessly. Transit is only required when instances reboot/restart. | Restore `guardian` or restart `vm-vault-transit` VM when convenient. |
-| **Host 1 (`colossus`) Fails** | 1 / 3 (`vm-vault-03`) | **QUORUM LOST** | **Cluster halts writes** to protect against split-brain corruption. | If `colossus` is recoverable, power it back on. If permanently destroyed, run [`scripts/raft_recovery.sh`](scripts/raft_recovery.sh) on `vm-vault-03` to promote it to single-node quorum. |
-| **Network Partition (colossus vs guardian)** | `colossus` (2 nodes) vs `guardian` (1 node) | `colossus` retains quorum (2/3) | `colossus` continues serving client traffic; `guardian` isolates itself. | Network partition auto-heals when link recovers; Raft log syncs automatically. |
-| **Transit VM Fails** | 3 / 3 | **QUORUM MAINTAINED** | **Zero downtime.** Existing unsealed memory state is unaffected. | Restart `vm-vault-transit` VM. |
+| **Host 2 (`guardian`) Fails** | 2 / 3 (`vm-vault-01`, `vm-vault-02`) | **QUORUM MAINTAINED** | No downtime — the cluster keeps reading and writing normally. Transit is only needed when a node restarts. | Restore `guardian`, or restart `vm-vault-transit`, whenever it's convenient. |
+| **Host 1 (`colossus`) Fails** | 1 / 3 (`vm-vault-03`) | **QUORUM LOST** | The cluster stops accepting writes, to avoid the risk of split-brain corruption. | If `colossus` can be recovered, just power it back on. If it's gone for good, run [`scripts/raft_recovery.sh`](scripts/raft_recovery.sh) on `vm-vault-03` to force it into single-node quorum. |
+| **Network Partition (colossus vs guardian)** | `colossus` (2 nodes) vs `guardian` (1 node) | `colossus` keeps quorum (2/3) | `colossus` keeps serving clients; `guardian` isolates itself rather than risk a split-brain write. | The partition heals itself once the network link is back; Raft catches the log up automatically. |
+| **Transit VM Fails** | 3 / 3 | **QUORUM MAINTAINED** | No downtime — nodes that are already unsealed keep working fine. | Restart `vm-vault-transit` whenever convenient. |
 
 ---
 
 ## 📐 Architectural Rationale & Engineering Decisions
 
-This project demonstrates how deep Linux systems administration principles are codified into modern Infrastructure-as-Code and declarative GitOps pipelines.
+Here's the reasoning behind the bigger design decisions in this project, and why they were made this way.
 
 ### 1. Asymmetrical Raft Quorum Across Dual Hypervisors
-* **The Challenge**: Standard high-availability blueprints mandate $\ge 3$ physical hypervisors. In real-world edge environments and homelabs, physical hardware is often constrained to 2 nodes.
-* **The Solution**: Rather than implementing complex hypervisor clustering (Corosync/pmxcfs) which introduces split-brain risks, `colossus` and `guardian` operate as **independent, standalone hypervisors**. Raft consensus ($N=3, Q=2$) is established purely at the application layer: Host 1 holds 2 voting members, Host 2 holds 1 voting member + the Transit unseal oracle. This guarantees zero downtime if Host 2 fails and eliminates cross-hypervisor locking.
+* **The Challenge**: Most HA guides assume you have 3 or more physical hosts. In a real homelab, you're often stuck with 2.
+* **The Solution**: Instead of clustering the hypervisors themselves — which brings its own split-brain risk (Corosync/pmxcfs) — `colossus` and `guardian` stay completely independent. The quorum logic happens one layer up, inside Vault's own Raft consensus ($N=3, Q=2$): Host 1 holds 2 of the 3 votes, and Host 2 holds the 3rd vote plus the Transit unseal VM. That means the cluster survives Host 2 going down with zero downtime, and there's no cross-hypervisor locking to worry about.
 
 ### 2. Zero-Touch Auto-Unseal Without Cloud KMS
-* **The Challenge**: Traditional open-source Vault requires human key custodians to enter Shamir unseal shards manually on every reboot, creating unacceptable downtime during kernel upgrades or automated node repaving.
-* **The Solution**: We deploy an isolated Vault VM (`vm-vault-transit`) running the Transit Secrets Engine. A custom systemd unit (`vault-transit-unseal.service`) automatically unseals Transit on boot in 1 second, enabling hands-free auto-unsealing for the main Raft cluster without commercial cloud KMS or Vault Enterprise licenses.
+* **The Challenge**: Open-source Vault normally needs a human to type in Shamir unseal keys by hand every time it restarts. That's a real problem for anything that reboots on its own, like a kernel upgrade or an automated node rebuild.
+* **The Solution**: There's a separate, isolated Vault VM (`vm-vault-transit`) running just the Transit Secrets Engine. A small systemd service (`vault-transit-unseal.service`) unseals it automatically on boot in about a second, which in turn lets the main cluster auto-unseal too — no commercial cloud KMS or Vault Enterprise license required.
 
 ### 3. Sentinel-Based Idempotency & Zero-Drift Single Node Recovery
-* **The Challenge**: Greenfield deployments (Day 1) are straightforward, but rebuilding a single dead node (Day 2) frequently triggers pipeline failures—such as overwriting surviving Root CAs, regenerating certificates across healthy nodes, or cycling surviving peers.
+* **The Challenge**: Standing the cluster up from scratch (Day 1) is the easy part. Rebuilding a single node that died (Day 2) without breaking the healthy ones is where things usually go wrong — like accidentally regenerating the Root CA or re-issuing certificates on nodes that were already fine.
 * **The Solution**:
-  * **Sentinel Marker Discovery**: Ansible checks for `/etc/vault.d/.vault_bootstrapped`. When rebuilding a single node (e.g., `vm-vault-03`), Ansible dynamically discovers surviving peers, slurps the existing Root CA, issues certificates *only* for the replacement node, and rejoins the Raft leader without disrupting active quorum.
-  * **Terraform Lifecycle Locks**: Configured `lifecycle { ignore_changes = [clone] }` to ensure Proxmox never reboots or modifies healthy running VMs during partial Terraform applies.
+  * **Marker files as a sentinel**: Each node gets a marker file at `/etc/vault.d/.vault_bootstrapped` once it's up and running. When rebuilding a single node (say, `vm-vault-03`), Ansible checks every other node for that marker to find a healthy survivor, copies its existing Root CA, issues a certificate for just the replacement node, and rejoins it to the Raft leader — without touching anything that already worked.
+  * **Terraform lifecycle locks**: `lifecycle { ignore_changes = all }` is set on every VM resource, so Terraform never reboots or modifies a healthy running VM just because it's re-applying to fix one broken node.
 
 ### 4. Linux Kernel Memory Locking (`mlock`) & CIS Hardening
-* **The Challenge**: In security-critical workloads, unencrypted process memory pages dumped to swap space can expose master encryption keys.
-* **The Solution**: All VMs are cloned from a minimal **AlmaLinux 9 CIS Level 2** template. Vault binary is granted `cap_ipc_lock=+ep`, systemd is locked with `LimitMEMLOCK=infinity`, and `disable_mlock = false` is enforced. SELinux file contexts (`bin_t`, `var_lib_t`) and mutual TLS (mTLS on port 8201) are applied declaratively.
+* **The Challenge**: If Vault's process memory ever gets swapped to disk, unencrypted master keys could end up sitting on the filesystem where someone with disk access could recover them.
+* **The Solution**: Every VM starts from a minimal **AlmaLinux 9 CIS Level 2** template. The Vault binary is granted the `cap_ipc_lock=+ep` capability, systemd is locked with `LimitMEMLOCK=infinity`, and `disable_mlock` is always set to `false` — so Vault's memory is locked in RAM and never swapped. SELinux file contexts (`bin_t`, `var_lib_t`) and mutual TLS (mTLS on port 8201) are applied automatically as well.
+
+### 5. Learning Vault Solo, With AI as a Sounding Board
+* **The Challenge**: This was my first time building a HashiCorp Vault cluster, and I built it alone — no mentor or team to check my thinking against. Raft quorum, auto-unseal, and CIS hardening all have easy ways to get wrong, and there was no one nearby to catch a bad assumption before it became a bad decision.
+* **The Solution**: I used Claude and Gemini to fill that gap — asking questions, talking through tradeoffs, and getting help writing Ansible tasks, Terraform config, and docs faster than I could alone. But every decision in this repo — the quorum layout, the auto-unseal design, the hardening choices — is one I made and then tested by hand, including the failure scenarios in [`docs/testing-and-validation.md`](docs/testing-and-validation.md). To me this isn't different from reading docs or asking questions in a forum — just faster and more back-and-forth.
 
 ---
 
@@ -90,9 +94,10 @@ This project demonstrates how deep Linux systems administration principles are c
 ```
 vault-bootstrap/
 ├── .gitlab-ci.yml                  # End-to-end GitOps pipeline (Plan -> Apply -> Ansible -> Verify)
-├── README.md                       # Comprehensive operational guide
+├── README.md                       # Operational guide
 ├── docs/
-│   ├── architecture.md             # Deep-dive architecture and threat model
+│   ├── architecture.md             # Architecture and threat model
+│   ├── testing-and-validation.md   # Chaos testing & failover validation runbook
 │   ├── security-operations.md      # Post-bootstrap secrets, recovery keys & break-glass runbook
 │   ├── gitlab-setup.md             # GitLab CI/CD setup guide on gitbox.jnet.lan
 │   ├── template-setup.md           # AlmaLinux 9 CIS Level 2 Proxmox template (ID 1000) setup guide
@@ -138,9 +143,9 @@ vault-bootstrap/
 
 ## 🚀 Deployment Guide (GitOps Pipeline)
 
-The primary and fully validated deployment method is automated end-to-end via the **GitLab CI/CD GitOps Pipeline**.
+The main way to deploy this is through the GitLab CI/CD pipeline, which handles everything end-to-end.
 
-For complete setup instructions (Proxmox API tokens and runner setup), see **[docs/gitlab-setup.md](docs/gitlab-setup.md)**.
+For full setup instructions (Proxmox API tokens and runner setup), see **[docs/gitlab-setup.md](docs/gitlab-setup.md)**.
 
 ### 1. Configure GitLab CI/CD Variables
 In your GitLab repository (**Settings** $\rightarrow$ **CI/CD** $\rightarrow$ **Variables**), configure the following:
@@ -155,34 +160,34 @@ In your GitLab repository (**Settings** $\rightarrow$ **CI/CD** $\rightarrow$ **
 | `SSH_PRIVATE_KEY` | No | Private SSH key (ED25519) for Ansible node configuration |
 
 ### 2. Trigger the Pipeline
-Push a commit to `main` (or click **Run pipeline** in GitLab). The pipeline automatically executes:
-1. **`validate`**: Syntax & lint verification (`terraform validate`, `ansible-playbook --syntax-check`).
-2. **`plan`**: Generates and inspects the Terraform execution plan with remote state locks.
+Push a commit to `main` (or click **Run pipeline** in GitLab). The pipeline runs through:
+1. **`validate`**: Syntax & lint checks (`terraform validate`, `ansible-playbook --syntax-check`).
+2. **`plan`**: Builds and inspects the Terraform execution plan with remote state locks.
 3. **`apply`**: Provisions VMs on `colossus` and `guardian` and assigns them to `backup_pool`.
-4. **`configure`**: Distributes mTLS certs, initialises Transit, auto-unseals, and joins Raft nodes.
+4. **`configure`**: Distributes mTLS certs, initializes Transit, auto-unseals, and joins Raft nodes.
 5. **`verify`**: Runs automated cluster health checks against `/v1/sys/health`.
 
 ---
 
 ## 🛠️ Operational & Disaster Recovery Utilities
 
-The `scripts/` directory provides helper utilities for cluster maintenance:
+The `scripts/` directory has a couple of helpers for cluster maintenance:
 
-* **[`scripts/vault_env.sh`](scripts/vault_env.sh)**: Sets up your local shell environment with `VAULT_ADDR`, `VAULT_CACERT`, and token for CLI management:
+* **[`scripts/vault_env.sh`](scripts/vault_env.sh)**: Sets up your local shell environment with `VAULT_ADDR`, `VAULT_CACERT`, and a token, for quick CLI access:
   ```bash
   source scripts/vault_env.sh 192.168.0.201
   vault status
   vault operator raft list-peers
   ```
-* **[`scripts/raft_recovery.sh`](scripts/raft_recovery.sh)**: Disaster recovery script for catastrophic failure scenarios (forces single-node quorum promotion on `vm-vault-03` if `colossus` is permanently destroyed).
+* **[`scripts/raft_recovery.sh`](scripts/raft_recovery.sh)**: A disaster recovery script for the worst case — forces single-node quorum promotion on `vm-vault-03` if `colossus` is permanently destroyed.
 
 ---
 
 ## 🗺️ Roadmap & Future Projects
 
-* **Packer Golden Image CI/CD Pipeline**: Fully automating the creation and synchronization of the AlmaLinux 9 CIS Level 2 base template (ID 1000) across `colossus` and `guardian` via scheduled GitLab CI/CD jobs. *(Planned for future implementation)*
-* **L4 Load Balancer Integration**: Fronting the 3-node cluster with a dedicated Layer 4 HAProxy / VIP (`https://vault.jnet.lan:8200`) for seamless client failover.
-* **OIDC & AppRole Provisioning**: Automated Terraform provider integration for application secrets and human authentication.
+* **Packer Golden Image CI/CD Pipeline**: Automate the AlmaLinux 9 CIS Level 2 template build (ID 1000) itself, so `colossus` and `guardian` stay in sync automatically via a scheduled GitLab CI/CD job. *(Not built yet.)*
+* **L4 Load Balancer Integration**: Put a Layer 4 load balancer (HAProxy / VIP at `https://vault.jnet.lan:8200`) in front of the 3-node cluster, so clients don't need to know which node is currently active.
+* **OIDC & AppRole Provisioning**: Add Terraform-managed OIDC and AppRole setup for application secrets and human authentication.
 
 ---
 

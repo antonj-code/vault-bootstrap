@@ -4,9 +4,11 @@
 *.tfstate.*
 *.tfplan
 *.plan
+tfplan
 crash.log
 crash.*.log
 *.tfvars
+*.auto.tfvars.json
 !terraform/terraform.tfvars.example
 override.tf
 override.tf.json
@@ -38,6 +40,7 @@ credentials/
 autounseal_token.txt
 *cluster_credentials*.json
 *transit_credentials*.json
+*.snap
 
 # Environment / Secret Files
 .env
