@@ -4,7 +4,7 @@ This guide documents the step-by-step procedures for validating cluster quorum, 
 
 ---
 
-## 📋 Overview of Test Scenarios
+## Overview of Test Scenarios
 
 | Scenario | Component Tested | Target Node | Expected Outcome |
 |---|---|---|---|
@@ -16,7 +16,7 @@ This guide documents the step-by-step procedures for validating cluster quorum, 
 
 ---
 
-## 🛠️ Step 0: Pre-Flight Baseline & Authentication
+## Step 0: Pre-Flight Baseline & Authentication
 
 Before running any chaos tests, establish your administrative session and verify baseline cluster health:
 

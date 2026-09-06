@@ -60,8 +60,8 @@ In HashiCorp Vault's Raft consensus algorithm:
 $$Q = \left\lfloor \frac{N}{2} \right\rfloor + 1$$
 For a 3-node cluster ($N=3$), minimum quorum requires **2 active nodes**.
 
-* **Host 1 (`colossus`)**: `vm-vault-01` (VM), `vm-vault-02` (VM) — Holds 2 voting members.
-* **Host 2 (`guardian`)**: `vm-vault-03` (VM), `vm-vault-transit` (VM) — Holds 1 voting member + Transit Auto-Unseal oracle.
+* **Host 1 (`colossus`)**: `vm-vault-01` (VM), `vm-vault-02` (VM), holds 2 voting members.
+* **Host 2 (`guardian`)**: `vm-vault-03` (VM), `vm-vault-transit` (VM), holds 1 voting member + Transit Auto-Unseal oracle.
 
 ```mermaid
 graph TD

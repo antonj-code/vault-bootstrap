@@ -1,10 +1,10 @@
 # Vault Bootstrap: 3-Node HA Cluster + Transit Auto-Unseal VM on Proxmox VE
 
-This repo has everything needed to stand up a highly available 3-node HashiCorp Vault cluster (using Raft storage) plus a separate Transit Vault for auto-unsealing — all as code. It covers the infrastructure (Terraform / OpenTofu), the configuration (Ansible), and the GitOps CI/CD pipeline (`.gitlab-ci.yml`) that ties it all together, running across two standalone Proxmox VE hosts: **`colossus`** and **`guardian`**.
+This repo has everything needed to stand up a highly available 3-node HashiCorp Vault cluster (using Raft storage) plus a separate Transit Vault for auto-unsealing, all as code. It covers the infrastructure (Terraform / OpenTofu), the configuration (Ansible), and the GitOps CI/CD pipeline (`.gitlab-ci.yml`) that ties it all together, running across two standalone Proxmox VE hosts: **`colossus`** and **`guardian`**.
 
 ---
 
-## 🏛️ System Architecture
+## System Architecture
 
 ```mermaid
 flowchart TB
@@ -42,9 +42,9 @@ flowchart TB
 
 ---
 
-## ⚖️ Hardware Distribution & Quorum Logic
+## Hardware Distribution & Quorum Logic
 
-A 3-node Raft cluster needs a strict majority — 2 out of 3 nodes — to keep working ($Q = \lfloor 3/2 \rfloor + 1 = 2$). Here's how those 3 nodes, plus the Transit VM, are split across the 2 physical hosts:
+A 3-node Raft cluster needs a strict majority, 2 out of 3 nodes, to keep working ($Q = \lfloor 3/2 \rfloor + 1 = 2$). Here's how those 3 nodes, plus the Transit VM, are split across the 2 physical hosts:
 
 * **Host 1 (`colossus`)** runs `vm-vault-01` (`192.168.0.201`) and `vm-vault-02` (`192.168.0.202`), both cloned from the AlmaLinux 9 CIS Level 2 template (ID 1000). That's 2 of the 3 Raft votes.
 * **Host 2 (`guardian`)** runs `vm-vault-03` (`192.168.0.203`) and `vm-vault-transit` (`192.168.0.200`), also cloned from Template 1000. That's the 3rd Raft vote, plus the Transit auto-unseal oracle.
@@ -54,42 +54,42 @@ A 3-node Raft cluster needs a strict majority — 2 out of 3 nodes — to keep w
 
 | Failure Scenario | Active Raft Nodes | Quorum State | Cluster Impact | Operational Action |
 |---|---|---|---|---|
-| **Host 2 (`guardian`) Fails** | 2 / 3 (`vm-vault-01`, `vm-vault-02`) | **QUORUM MAINTAINED** | No downtime — the cluster keeps reading and writing normally. Transit is only needed when a node restarts. | Restore `guardian`, or restart `vm-vault-transit`, whenever it's convenient. |
+| **Host 2 (`guardian`) Fails** | 2 / 3 (`vm-vault-01`, `vm-vault-02`) | **QUORUM MAINTAINED** | No downtime; the cluster keeps reading and writing normally. Transit is only needed when a node restarts. | Restore `guardian`, or restart `vm-vault-transit`, whenever it's convenient. |
 | **Host 1 (`colossus`) Fails** | 1 / 3 (`vm-vault-03`) | **QUORUM LOST** | The cluster stops accepting writes, to avoid the risk of split-brain corruption. | If `colossus` can be recovered, just power it back on. If it's gone for good, run [`scripts/raft_recovery.sh`](scripts/raft_recovery.sh) on `vm-vault-03` to force it into single-node quorum. |
 | **Network Partition (colossus vs guardian)** | `colossus` (2 nodes) vs `guardian` (1 node) | `colossus` keeps quorum (2/3) | `colossus` keeps serving clients; `guardian` isolates itself rather than risk a split-brain write. | The partition heals itself once the network link is back; Raft catches the log up automatically. |
-| **Transit VM Fails** | 3 / 3 | **QUORUM MAINTAINED** | No downtime — nodes that are already unsealed keep working fine. | Restart `vm-vault-transit` whenever convenient. |
+| **Transit VM Fails** | 3 / 3 | **QUORUM MAINTAINED** | No downtime; nodes that are already unsealed keep working fine. | Restart `vm-vault-transit` whenever convenient. |
 
 ---
 
-## 📐 Architectural Rationale & Engineering Decisions
+## Architectural Rationale & Engineering Decisions
 
 Here's the reasoning behind the bigger design decisions in this project, and why they were made this way.
 
 ### 1. Asymmetrical Raft Quorum Across Dual Hypervisors
 * **The Challenge**: Most HA guides assume you have 3 or more physical hosts. In a real homelab, you're often stuck with 2.
-* **The Solution**: Instead of clustering the hypervisors themselves — which brings its own split-brain risk (Corosync/pmxcfs) — `colossus` and `guardian` stay completely independent. The quorum logic happens one layer up, inside Vault's own Raft consensus ($N=3, Q=2$): Host 1 holds 2 of the 3 votes, and Host 2 holds the 3rd vote plus the Transit unseal VM. That means the cluster survives Host 2 going down with zero downtime, and there's no cross-hypervisor locking to worry about.
+* **The Solution**: Instead of clustering the hypervisors themselves, which brings its own split-brain risk (Corosync/pmxcfs), `colossus` and `guardian` stay completely independent. The quorum logic happens one layer up, inside Vault's own Raft consensus ($N=3, Q=2$): Host 1 holds 2 of the 3 votes, and Host 2 holds the 3rd vote plus the Transit unseal VM. That means the cluster survives Host 2 going down with zero downtime, and there's no cross-hypervisor locking to worry about.
 
 ### 2. Zero-Touch Auto-Unseal Without Cloud KMS
 * **The Challenge**: Open-source Vault normally needs a human to type in Shamir unseal keys by hand every time it restarts. That's a real problem for anything that reboots on its own, like a kernel upgrade or an automated node rebuild.
-* **The Solution**: There's a separate, isolated Vault VM (`vm-vault-transit`) running just the Transit Secrets Engine. A small systemd service (`vault-transit-unseal.service`) unseals it automatically on boot in about a second, which in turn lets the main cluster auto-unseal too — no commercial cloud KMS or Vault Enterprise license required.
+* **The Solution**: There's a separate, isolated Vault VM (`vm-vault-transit`) running just the Transit Secrets Engine. A small systemd service (`vault-transit-unseal.service`) unseals it automatically on boot in about a second, which in turn lets the main cluster auto-unseal too, no commercial cloud KMS or Vault Enterprise license required.
 
 ### 3. Sentinel-Based Idempotency & Zero-Drift Single Node Recovery
-* **The Challenge**: Standing the cluster up from scratch (Day 1) is the easy part. Rebuilding a single node that died (Day 2) without breaking the healthy ones is where things usually go wrong — like accidentally regenerating the Root CA or re-issuing certificates on nodes that were already fine.
+* **The Challenge**: Standing the cluster up from scratch (Day 1) is the easy part. Rebuilding a single node that died (Day 2) without breaking the healthy ones is where things usually go wrong, like accidentally regenerating the Root CA or re-issuing certificates on nodes that were already fine.
 * **The Solution**:
-  * **Marker files as a sentinel**: Each node gets a marker file at `/etc/vault.d/.vault_bootstrapped` once it's up and running. When rebuilding a single node (say, `vm-vault-03`), Ansible checks every other node for that marker to find a healthy survivor, copies its existing Root CA, issues a certificate for just the replacement node, and rejoins it to the Raft leader — without touching anything that already worked.
+  * **Marker files as a sentinel**: Each node gets a marker file at `/etc/vault.d/.vault_bootstrapped` once it's up and running. When rebuilding a single node (say, `vm-vault-03`), Ansible checks every other node for that marker to find a healthy survivor, copies its existing Root CA, issues a certificate for just the replacement node, and rejoins it to the Raft leader, without touching anything that already worked.
   * **Terraform lifecycle locks**: `lifecycle { ignore_changes = all }` is set on every VM resource, so Terraform never reboots or modifies a healthy running VM just because it's re-applying to fix one broken node.
 
 ### 4. Linux Kernel Memory Locking (`mlock`) & CIS Hardening
 * **The Challenge**: If Vault's process memory ever gets swapped to disk, unencrypted master keys could end up sitting on the filesystem where someone with disk access could recover them.
-* **The Solution**: Every VM starts from a minimal **AlmaLinux 9 CIS Level 2** template. The Vault binary is granted the `cap_ipc_lock=+ep` capability, systemd is locked with `LimitMEMLOCK=infinity`, and `disable_mlock` is always set to `false` — so Vault's memory is locked in RAM and never swapped. SELinux file contexts (`bin_t`, `var_lib_t`) and mutual TLS (mTLS on port 8201) are applied automatically as well.
+* **The Solution**: Every VM starts from a minimal **AlmaLinux 9 CIS Level 2** template. The Vault binary is granted the `cap_ipc_lock=+ep` capability, systemd is locked with `LimitMEMLOCK=infinity`, and `disable_mlock` is always set to `false`, so Vault's memory is locked in RAM and never swapped. SELinux file contexts (`bin_t`, `var_lib_t`) and mutual TLS (mTLS on port 8201) are applied automatically as well.
 
 ### 5. Learning Vault Solo, With AI as a Sounding Board
-* **The Challenge**: This was my first time building a HashiCorp Vault cluster, and I built it alone — no mentor or team to check my thinking against. Raft quorum, auto-unseal, and CIS hardening all have easy ways to get wrong, and there was no one nearby to catch a bad assumption before it became a bad decision.
-* **The Solution**: I used Claude and Gemini to fill that gap — asking questions, talking through tradeoffs, and getting help writing Ansible tasks, Terraform config, and docs faster than I could alone. But every decision in this repo — the quorum layout, the auto-unseal design, the hardening choices — is one I made and then tested by hand, including the failure scenarios in [`docs/testing-and-validation.md`](docs/testing-and-validation.md). To me this isn't different from reading docs or asking questions in a forum — just faster and more back-and-forth.
+* **The Challenge**: This was my first time building a HashiCorp Vault cluster, and I built it alone, with no mentor or team to check my thinking against. Raft quorum, auto-unseal, and CIS hardening all have easy ways to get wrong, and there was no one nearby to catch a bad assumption before it became a bad decision.
+* **The Solution**: I used Claude and Gemini to fill that gap, asking questions, talking through tradeoffs, and getting help writing Ansible tasks, Terraform config, and docs faster than I could alone. But every decision in this repo, the quorum layout, the auto-unseal design, the hardening choices, is one I made and then tested by hand, including the failure scenarios in [`docs/testing-and-validation.md`](docs/testing-and-validation.md). To me this isn't different from reading docs or asking questions in a forum, just faster and more back-and-forth.
 
 ---
 
-## 📁 Repository Structure
+## Repository Structure
 
 ```
 vault-bootstrap/
@@ -141,7 +141,7 @@ vault-bootstrap/
 
 ---
 
-## 🚀 Deployment Guide (GitOps Pipeline)
+## Deployment Guide (GitOps Pipeline)
 
 The main way to deploy this is through the GitLab CI/CD pipeline, which handles everything end-to-end.
 
@@ -169,7 +169,7 @@ Push a commit to `main` (or click **Run pipeline** in GitLab). The pipeline runs
 
 ---
 
-## 🛠️ Operational & Disaster Recovery Utilities
+## Operational & Disaster Recovery Utilities
 
 The `scripts/` directory has a couple of helpers for cluster maintenance:
 
@@ -179,11 +179,11 @@ The `scripts/` directory has a couple of helpers for cluster maintenance:
   vault status
   vault operator raft list-peers
   ```
-* **[`scripts/raft_recovery.sh`](scripts/raft_recovery.sh)**: A disaster recovery script for the worst case — forces single-node quorum promotion on `vm-vault-03` if `colossus` is permanently destroyed.
+* **[`scripts/raft_recovery.sh`](scripts/raft_recovery.sh)**: A disaster recovery script for the worst case, forces single-node quorum promotion on `vm-vault-03` if `colossus` is permanently destroyed.
 
 ---
 
-## 🗺️ Roadmap & Future Projects
+## Roadmap & Future Projects
 
 * **Packer Golden Image CI/CD Pipeline**: Automate the AlmaLinux 9 CIS Level 2 template build (ID 1000) itself, so `colossus` and `guardian` stay in sync automatically via a scheduled GitLab CI/CD job. *(Not built yet.)*
 * **L4 Load Balancer Integration**: Put a Layer 4 load balancer (HAProxy / VIP at `https://vault.jnet.lan:8200`) in front of the 3-node cluster, so clients don't need to know which node is currently active.
@@ -191,7 +191,7 @@ The `scripts/` directory has a couple of helpers for cluster maintenance:
 
 ---
 
-## 📚 Documentation Index
+## Documentation Index
 
 * **[Architecture & Quorum Guide](docs/architecture.md)**: Physical host topology, Raft consensus mechanics, and failure domain analysis.
 * **[Testing & Chaos Validation Runbook](docs/testing-and-validation.md)**: Step-by-step procedures for node loss, leader failover, auto-unseal recovery, and data replication validation.
