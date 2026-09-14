@@ -2,6 +2,9 @@
 
 This document outlines the architecture, distribution logic, quorum behavior, network topology, and security hardening for a high-availability **3-Node HashiCorp Vault Cluster** with an isolated **Transit Auto-Unseal Vault VM** running across **2x Standalone Proxmox VE physical hosts: `colossus` and `guardian`**.
 
+> [!NOTE]
+> **Homelab scope**: This architecture was built for my homelab and sized to the two physical hosts I have. I understand the limitation that comes with that: 2 physical hosts cannot provide a true third failure domain, so losing the majority host (`colossus`) loses Raft quorum and requires manual recovery. This is an accepted tradeoff for a lab, not a pattern to copy into production as-is. See [Section 2.4](#24-the-2-physical-server-quorum-constraint--scaling-to-3-domains) for the full analysis and how a 3rd failure domain would remove it.
+
 ---
 
 ## 1. Executive Architecture Overview

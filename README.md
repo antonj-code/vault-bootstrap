@@ -2,6 +2,9 @@
 
 This repo has everything needed to stand up a highly available 3-node HashiCorp Vault cluster (using Raft storage) plus a separate Transit Vault for auto-unsealing, all as code. It covers the infrastructure (Terraform / OpenTofu), the configuration (Ansible), and the GitOps CI/CD pipeline (`.gitlab-ci.yml`) that ties it all together, running across two standalone Proxmox VE hosts: **`colossus`** and **`guardian`**.
 
+> [!NOTE]
+> **Built for my homelab, not for production.** This project was designed around the hardware I actually have: two physical Proxmox hosts. I know that's a real limit. With only 2 physical hosts there is no true third failure domain, so the cluster can ride out losing `guardian` with no downtime, but losing `colossus` drops quorum and needs manual recovery. A production deployment should spread Raft voters across at least 3 independent failure domains. See [The 2-Physical-Server Quorum Constraint](docs/architecture.md#24-the-2-physical-server-quorum-constraint--scaling-to-3-domains) for the details and the path to fixing it.
+
 ---
 
 ## System Architecture
@@ -49,6 +52,8 @@ A 3-node Raft cluster needs a strict majority, 2 out of 3 nodes, to keep working
 * **Host 1 (`colossus`)** runs `vm-vault-01` (`192.168.0.201`) and `vm-vault-02` (`192.168.0.202`), both cloned from the AlmaLinux 9 CIS Level 2 template (ID 1000). That's 2 of the 3 Raft votes.
 * **Host 2 (`guardian`)** runs `vm-vault-03` (`192.168.0.203`) and `vm-vault-transit` (`192.168.0.200`), also cloned from Template 1000. That's the 3rd Raft vote, plus the Transit auto-unseal oracle.
 * **Hypervisor independence**: `colossus` and `guardian` are standalone hosts with no clustering between them, so a problem on one can never drag the other down.
+
+This layout is a deliberate tradeoff for a 2-host lab, not full HA. Whichever host holds 2 of the 3 votes is a single point of failure for quorum, and no arrangement of Raft nodes across only 2 physical machines avoids that.
 
 ### Failure Scenarios & Mitigations
 
@@ -101,13 +106,13 @@ vault-bootstrap/
 │   ├── security-operations.md      # Post-bootstrap secrets, recovery keys & break-glass runbook
 │   ├── gitlab-setup.md             # GitLab CI/CD setup guide on gitbox.jnet.lan
 │   ├── template-setup.md           # AlmaLinux 9 CIS Level 2 Proxmox template (ID 1000) setup guide
-│   └── packer-repaving.md          # Automated Packer build & rolling repave guide
-├── packer/                         # Automated AlmaLinux 9 CIS Level 2 Image Builder
-│   ├── almalinux9-cis.pkr.hcl      # Proxmox ISO Packer template
-│   ├── variables.pkr.hcl           # Packer variable definitions
+│   └── packer-repaving.md          # Planned Packer build & rolling repave design (Packer not implemented)
+├── packer/                         # DRAFT ONLY: planned image builder, not implemented or used yet
+│   ├── almalinux9-cis.pkr.hcl      # Draft Proxmox ISO Packer template
+│   ├── variables.pkr.hcl           # Draft Packer variable definitions
 │   ├── pkrvars.example.hcl         # Sample build variables
-│   ├── http/ks.cfg                 # Automated CIS Kickstart configuration
-│   └── scripts/                    # Hardening and image cleanup provisioners
+│   ├── http/ks.cfg                 # Draft CIS Kickstart configuration
+│   └── scripts/                    # Draft hardening and image cleanup provisioners
 ├── terraform/                      # OpenTofu / Terraform Proxmox IaC
 │   ├── versions.tf                 # bpg/proxmox provider & GitLab HTTP backend
 │   ├── variables.tf                # Dual-host endpoints, node configs, credentials
@@ -131,7 +136,7 @@ vault-bootstrap/
 │   │   └── vault_cluster/          # Raft configuration, auto-unseal, retry_join, sentinel marker
 │   └── playbooks/
 │       ├── site.yaml               # Master end-to-end bootstrap playbook
-│       ├── rolling_update.yaml     # Zero-downtime rolling repave (Method A)
+│       ├── rolling_update.yaml     # Zero-downtime rolling in-place update (Method A)
 │       ├── provision_transit.yaml  # Standalone Transit Vault playbook
 │       └── provision_cluster.yaml  # Standalone Main Cluster playbook
 └── scripts/
@@ -185,7 +190,7 @@ The `scripts/` directory has a couple of helpers for cluster maintenance:
 
 ## Roadmap & Future Projects
 
-* **Packer Golden Image CI/CD Pipeline**: Automate the AlmaLinux 9 CIS Level 2 template build (ID 1000) itself, so `colossus` and `guardian` stay in sync automatically via a scheduled GitLab CI/CD job. *(Not built yet.)*
+* **Packer Golden Image CI/CD Pipeline**: Automate the AlmaLinux 9 CIS Level 2 template build (ID 1000) itself, so `colossus` and `guardian` stay in sync automatically via a scheduled GitLab CI/CD job. *(Not implemented yet. Template 1000 is currently built by hand, and the files in `packer/` are untested drafts that the pipeline does not use.)*
 * **L4 Load Balancer Integration**: Put a Layer 4 load balancer (HAProxy / VIP at `https://vault.jnet.lan:8200`) in front of the 3-node cluster, so clients don't need to know which node is currently active.
 * **OIDC & AppRole Provisioning**: Add Terraform-managed OIDC and AppRole setup for application secrets and human authentication.
 
@@ -197,5 +202,5 @@ The `scripts/` directory has a couple of helpers for cluster maintenance:
 * **[Testing & Chaos Validation Runbook](docs/testing-and-validation.md)**: Step-by-step procedures for node loss, leader failover, auto-unseal recovery, and data replication validation.
 * **[Post-Bootstrap Security & Operations Guide](docs/security-operations.md)**: Recovery keys, artifact security, root token revocation, workstation TLS CA setup, and break-glass procedures.
 * **[GitLab CI/CD Setup Guide](docs/gitlab-setup.md)**: Runner installation, CI/CD variables, and pipeline configuration.
-* **[Proxmox VM Template Guide](docs/template-setup.md)**: AlmaLinux 9 CIS Level 2 Golden Image creation.
-* **[Zero-Downtime Repaving Guide](docs/packer-repaving.md)**: Rolling updates and immutable infrastructure repaving.
+* **[Proxmox VM Template Guide](docs/template-setup.md)**: Manual AlmaLinux 9 CIS Level 2 Golden Image creation (the current process).
+* **[Zero-Downtime Repaving Guide](docs/packer-repaving.md)**: Rolling in-place updates today, plus the planned (not yet implemented) Packer-based repave design.

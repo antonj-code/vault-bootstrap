@@ -14,7 +14,7 @@ When creating the base VM in the Proxmox Web UI before converting it to a templa
 | Hardware Option | Setting | Why It Is Configured This Way |
 |---|---|---|
 | **VM ID** | **`1000`** | Matches `var.template_vm_id` in Terraform. |
-| **Name** | **`almalinux-9-cis2-template`** | Clean, descriptive naming matching Packer automation. |
+| **Name** | **`almalinux-9-cis2-template`** | Clean, descriptive naming matching the planned Packer automation. |
 | **BIOS** | **`Default (SeaBIOS)`** | Faster boot, zero EFI disk overhead, simpler cloning across standalone hosts. |
 | **TPM** | **`Disabled / None`** | Not needed for Open-Source Vault (Transit Auto-Unseal handles keys). |
 | **CPU** | **2 Cores**, Type: **`host`** | Direct CPU flag pass-through (enables hardware AES-NI encryption). |
