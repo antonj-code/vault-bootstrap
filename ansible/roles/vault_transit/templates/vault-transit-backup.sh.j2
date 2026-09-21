@@ -1,0 +1,55 @@
+#!/bin/bash
+# {{ ansible_managed }}
+# Cold backup of the Transit Vault: file storage + unseal key + config/TLS.
+# Vault is stopped for a few seconds so the file backend is copied consistently;
+# already-unsealed cluster nodes are unaffected.
+set -euo pipefail
+umask 077
+
+BACKUP_DIR="{{ vault_transit_backup_dir }}"
+KEEP="{{ vault_transit_backup_keep }}"
+RECIPIENT_KEY="{{ vault_config_dir }}/backup-recipient.asc"
+ARCHIVE="${BACKUP_DIR}/transit-$(date +%Y%m%d-%H%M%S).tar.gz"
+
+restart_and_unseal() {
+  systemctl start vault
+  # Stopping vault also stops the unseal unit (Requires=); starting vault does not re-run it
+  systemctl restart vault-transit-unseal
+}
+
+mkdir -p "${BACKUP_DIR}"
+
+# Make sure Vault is always brought back, even if tar fails
+trap restart_and_unseal EXIT
+systemctl stop vault
+tar -czf "${ARCHIVE}" -C / "{{ vault_data_dir | regex_replace('^/', '') }}" "{{ vault_config_dir | regex_replace('^/', '') }}"
+trap - EXIT
+restart_and_unseal
+
+# Fail loudly (unit goes to failed state) if Transit does not come back unsealed
+for _ in $(seq 1 24); do
+  if curl -sf --cacert "{{ vault_tls_dir }}/ca.crt" "https://127.0.0.1:{{ vault_api_port }}/v1/sys/health" >/dev/null; then
+    unsealed=1
+    break
+  fi
+  sleep 5
+done
+if [ -z "${unsealed:-}" ]; then
+  echo "ERROR: Transit Vault is not unsealed after backup" >&2
+  exit 1
+fi
+
+if [ -s "${RECIPIENT_KEY}" ]; then
+  GNUPGHOME="$(mktemp -d)"
+  export GNUPGHOME
+  gpg --batch --yes --quiet --trust-model always --recipient-file "${RECIPIENT_KEY}" \
+      --output "${ARCHIVE}.gpg" --encrypt "${ARCHIVE}"
+  rm -rf "${GNUPGHOME}" "${ARCHIVE}"
+  ARCHIVE="${ARCHIVE}.gpg"
+fi
+
+# Keep only the newest $KEEP archives
+find "${BACKUP_DIR}" -maxdepth 1 -name 'transit-*.tar.gz*' -printf '%T@ %p\n' \
+  | sort -rn | tail -n +"$((KEEP + 1))" | cut -d' ' -f2- | xargs -r rm -f
+
+echo "Transit backup written: ${ARCHIVE}"

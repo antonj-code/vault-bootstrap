@@ -200,12 +200,28 @@ The pipeline enforces this: if `vm-vault-transit` comes up empty while any main 
 1. **Proxmox VM Snapshots / Backups (Recommended for Homelabs)**:
    * **Proactive Step**: After initial deployment, right-click `vm-vault-transit` (VM ID 500) in the Proxmox web GUI $\rightarrow$ **Take Snapshot** (or include it in a scheduled Proxmox backup job to local storage or NAS).
    * **Recovery**: If `vm-vault-transit` is ever corrupted or deleted, click **Restore** in Proxmox. The VM boots up, the self-healing systemd service (`vault-transit-unseal.service`) auto-unseals it in 1 second, and the main cluster immediately unseals.
-2. **Local `/opt/vault/data` Archive**:
-   * Create a simple tarball backup of Transit storage:
+2. **Scheduled In-VM Archive (managed by Ansible)**:
+   * A systemd timer on `vm-vault-transit` (`vault-transit-backup.timer`, daily at 03:30) runs `/usr/local/sbin/vault-transit-backup.sh`. It stops Vault for a few seconds (the `file` storage backend is not safe to copy live), archives `/opt/vault/data` and `/etc/vault.d` (including the `transit.key` unseal key), restarts Vault, re-runs `vault-transit-unseal.service`, and fails the unit if Transit does not come back unsealed. Already-unsealed cluster nodes are unaffected.
+   * Archives land in `/var/backups/vault-transit/`; the newest 7 are kept. Settings live in `ansible/inventory/group_vars/vault_transit.yaml`.
+   * **Encryption**: set `vault_transit_backup_gpg_public_key` to your ASCII-armored GPG public key and archives are written as `.tar.gz.gpg`, decryptable only with your private key. Without it, archives are plaintext (root-only).
+   * **Sensitivity**: an archive holds the Transit key *and* its unseal key, plus the Root CA private key under `tls/`. Anyone holding it can unseal the main cluster. Encrypt it before it leaves the VM.
+   * **Copy it off the VM**: a backup stored only on VM 500 dies with VM 500.
      ```bash
-     ssh almalinux@192.168.0.200 "sudo tar -czvf /tmp/transit-data.tar.gz /opt/vault/data"
+     ssh almalinux@192.168.0.200 'sudo ls -t /var/backups/vault-transit/'        # find the newest
+     ssh almalinux@192.168.0.200 'sudo cat /var/backups/vault-transit/transit-<stamp>.tar.gz.gpg' > transit-<stamp>.tar.gz.gpg
      ```
-   * If rebuilding the VM via Terraform, restore this archive before starting Vault.
+     (The backup directory is root-only, so a plain `scp` as `almalinux` cannot read it.)
+   * Run a backup on demand: `sudo systemctl start vault-transit-backup.service`; check results with `systemctl status vault-transit-backup.service` and `journalctl -u vault-transit-backup`.
+   * **Restore** (before any pipeline run, so the Transit init guard sees an initialized Transit):
+     ```bash
+     sudo systemctl stop vault
+     gpg --decrypt transit-<stamp>.tar.gz.gpg > transit.tar.gz   # on your workstation, if encrypted
+     sudo tar -xzf transit.tar.gz -C /
+     sudo chown -R vault:vault /opt/vault/data
+     sudo restorecon -Rv /opt/vault /etc/vault.d
+     sudo systemctl start vault && sudo systemctl restart vault-transit-unseal
+     curl -s https://127.0.0.1:8200/v1/sys/health | jq .sealed   # must be false
+     ```
 3. **Full Greenfield Re-deployment**:
    * If you want to start fresh with a new Transit key, destroy all 4 VMs (`500`, `501`, `502`, `503`) in Proxmox and run the pipeline to initialize the cluster and Transit together.
 

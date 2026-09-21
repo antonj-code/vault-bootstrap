@@ -11,6 +11,15 @@ transit_key_threshold: 1
 transit_key_name: "vault-unseal-key"
 transit_key_type: "aes256-gcm96"
 
+# Scheduled cold backup (see docs/security-operations.md section 5.2)
+vault_transit_backup_enabled: true
+vault_transit_backup_schedule: "*-*-* 03:30:00"
+vault_transit_backup_dir: "/var/backups/vault-transit"
+vault_transit_backup_keep: 7
+# ASCII-armored GPG public key; when set, archives are encrypted to it.
+# Leave empty for unencrypted archives (root-only, but encrypt before copying off the VM).
+vault_transit_backup_gpg_public_key: ""
+
 # Memory locking
 vault_disable_mlock: false
 

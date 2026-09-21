@@ -1,0 +1,61 @@
+---
+- name: Install Transit backup script
+  ansible.builtin.template:
+    src: vault-transit-backup.sh.j2
+    dest: /usr/local/sbin/vault-transit-backup.sh
+    owner: root
+    group: root
+    mode: '0700'
+
+- name: Install GPG public key for backup encryption
+  ansible.builtin.copy:
+    content: "{{ vault_transit_backup_gpg_public_key }}"
+    dest: "{{ vault_config_dir }}/backup-recipient.asc"
+    owner: root
+    group: root
+    mode: '0644'
+  when: vault_transit_backup_gpg_public_key | length > 0
+
+- name: Remove GPG public key when backup encryption is disabled
+  ansible.builtin.file:
+    path: "{{ vault_config_dir }}/backup-recipient.asc"
+    state: absent
+  when: vault_transit_backup_gpg_public_key | length == 0
+
+- name: Install Transit backup systemd service and timer
+  ansible.builtin.copy:
+    dest: "/etc/systemd/system/{{ item.name }}"
+    content: "{{ item.content }}"
+    owner: root
+    group: root
+    mode: '0644'
+  loop:
+    - name: vault-transit-backup.service
+      content: |
+        [Unit]
+        Description=Cold backup of Transit Vault storage and unseal key
+        After=vault.service
+
+        [Service]
+        Type=oneshot
+        ExecStart=/usr/local/sbin/vault-transit-backup.sh
+    - name: vault-transit-backup.timer
+      content: |
+        [Unit]
+        Description=Scheduled Transit Vault backup
+
+        [Timer]
+        OnCalendar={{ vault_transit_backup_schedule }}
+        Persistent=true
+
+        [Install]
+        WantedBy=timers.target
+  loop_control:
+    label: "{{ item.name }}"
+
+- name: Enable Transit backup timer
+  ansible.builtin.systemd:
+    name: vault-transit-backup.timer
+    enabled: true
+    state: started
+    daemon_reload: true

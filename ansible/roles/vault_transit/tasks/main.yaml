@@ -314,3 +314,7 @@
     owner: "{{ vault_user }}"
     group: "{{ vault_group }}"
     mode: '0640'
+
+- name: Configure scheduled Transit backup
+  ansible.builtin.include_tasks: backup.yaml
+  when: vault_transit_backup_enabled | bool
