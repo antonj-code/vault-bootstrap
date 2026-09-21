@@ -79,6 +79,25 @@ If the initial root token is revoked and all administrative accounts are lost or
 
 Because the cluster uses internal enterprise TLS certificates issued during deployment, installing `ca.crt` on your workstation allows your browser and CLI to verify the TLS certificates without security warnings.
 
+Without it, browsing to `https://vault.jnet.lan:8200/` fails with "Peer's Certificate issuer is not recognized". Vault only serves its leaf certificate, so the root CA cannot be exported from the browser; fetch it using one of the options below.
+
+### 3.0 Getting the CA Certificate
+
+Copy it from any Vault node (every node has the same CA, world-readable in the system trust store):
+```bash
+scp almalinux@192.168.0.201:/etc/pki/ca-trust/source/anchors/vault-ca.crt jnet-vault-root-ca.crt
+```
+
+Or download `credentials/tls/ca.crt` from the latest `ansible:configure` job artifact (see section 1.2). Only take `ca.crt`, never `ca.key`.
+
+The file can be renamed freely; trust is based on its contents. Verify it before trusting it:
+```bash
+openssl x509 -in jnet-vault-root-ca.crt -noout -subject -fingerprint -sha256
+# subject should end with: CN = JNET-Vault-Root-CA
+```
+
+The examples below use `credentials/tls/ca.crt`; substitute your downloaded file.
+
 ### 3.1 Linux (AlmaLinux / Fedora / RHEL)
 ```bash
 sudo cp credentials/tls/ca.crt /etc/pki/ca-trust/source/anchors/vault-internal-ca.crt
@@ -91,15 +110,36 @@ sudo cp credentials/tls/ca.crt /usr/local/share/ca-certificates/vault-internal-c
 sudo update-ca-certificates
 ```
 
-### 3.3 macOS
+### 3.3 Linux (Arch / Omarchy)
+```bash
+sudo cp credentials/tls/ca.crt /etc/ca-certificates/trust-source/anchors/jnet-vault-root-ca.crt
+sudo update-ca-trust
+```
+
+Copying the file into `anchors/` does nothing until `update-ca-trust` runs.
+
+### 3.4 macOS
 ```bash
 sudo security add-trusted-cert -d -r trustRoot -k /Library/Keychains/System.keychain credentials/tls/ca.crt
 ```
 
-### 3.4 Windows (PowerShell Administrator)
+### 3.5 Windows (PowerShell Administrator)
 ```powershell
 Import-Certificate -FilePath "credentials\tls\ca.crt" -CertStoreLocation "Cert:\LocalMachine\Root"
 ```
+
+### 3.6 Firefox
+
+Firefox on Linux keeps its own trust store and ignores the system one. Import the CA separately:
+Settings > Privacy & Security > Certificates > View Certificates > Authorities > Import, then tick "Trust this CA to identify websites". Chromium-based browsers use the system store.
+
+### 3.7 Verify
+```bash
+trust list | grep -i -A2 jnet                        # Linux (p11-kit)
+curl https://vault.jnet.lan:8200/v1/sys/health       # should succeed without -k
+```
+
+The CA stays trusted across certificate renewals as long as the nodes keep being signed by `JNET-Vault-Root-CA`.
 
 ---
 
