@@ -46,6 +46,53 @@
   register: transit_seal_check
   when: transit_init_check.json.initialized
 
+# A new Transit means a new seal key. If the main cluster already exists, its data is
+# sealed with the old key: re-initializing here would rewrite every node's seal token,
+# restart the cluster, and leave it permanently sealed. Restore VM 500 from backup instead.
+- name: Guard against re-initializing Transit under an existing cluster
+  when: not transit_init_check.json.initialized
+  block:
+    - name: Check for bootstrap marker on main cluster nodes
+      ansible.builtin.stat:
+        path: "{{ hostvars[item].vault_bootstrap_marker | default('/etc/vault.d/.vault_bootstrapped') }}"
+      delegate_to: "{{ item }}"
+      loop: "{{ groups['vault_cluster'] }}"
+      register: vault_transit_cluster_markers
+      ignore_unreachable: true
+
+    - name: Check main cluster nodes initialization via HTTP API
+      ansible.builtin.uri:
+        url: "https://{{ hostvars[item].ansible_host }}:{{ vault_api_port }}/v1/sys/init"
+        ca_path: "{{ vault_tls_dir }}/ca.crt"
+        method: GET
+        status_code: [200]
+        timeout: 5
+      loop: "{{ groups['vault_cluster'] }}"
+      register: vault_transit_cluster_init
+      failed_when: false
+
+    - name: Summarize main cluster state
+      ansible.builtin.set_fact:
+        vault_transit_cluster_found: >-
+          {{ (vault_transit_cluster_markers.results | selectattr('stat', 'defined') | map(attribute='stat.exists') | select | list
+              + vault_transit_cluster_init.results | selectattr('json', 'defined') | map(attribute='json.initialized') | select | list)
+             | length > 0 }}
+        vault_transit_cluster_unknown: >-
+          {{ vault_transit_cluster_markers.results | selectattr('unreachable', 'defined') | selectattr('unreachable')
+             | map(attribute='item') | list }}
+
+    - name: Refuse to initialize a new Transit while the main cluster exists
+      ansible.builtin.assert:
+        that:
+          - not (vault_transit_cluster_found | bool)
+          - vault_transit_cluster_unknown | length == 0
+        fail_msg: >-
+          Refusing to initialize a new Transit Vault.
+          {% if vault_transit_cluster_found | bool %}The main cluster is already initialized and its data is sealed
+          with the existing Transit key; a new key would leave it permanently sealed.{% else %}Could not check
+          {{ vault_transit_cluster_unknown | join(', ') }}, so an existing cluster cannot be ruled out.{% endif %}
+          Restore vm-vault-transit (VM 500) from a Proxmox backup instead. See docs/security-operations.md section 5.
+
 - name: Initialize Transit Vault if uninitialized
   when: not transit_init_check.json.initialized
   block:

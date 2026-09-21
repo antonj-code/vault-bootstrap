@@ -193,6 +193,8 @@ In an auto-unsealed Vault architecture, the Transit Secrets Engine acts as the *
 ### 5.1 Why Snapshots are Critical for Transit Recovery
 If the Transit VM is destroyed and recreated with an empty disk, it generates a *new* encryption key that cannot decrypt the existing cluster data. Therefore, recovering Transit requires preserving or restoring its original key ring.
 
+The pipeline enforces this: if `vm-vault-transit` comes up empty while any main cluster node is initialized (or cannot be checked), the Transit role fails with "Refusing to initialize a new Transit Vault" before generating a new key, touching the credentials, or restarting the cluster. Terraform may already have recreated an empty VM 500 by then; delete it and restore the backup in its place. Running cluster nodes stay unsealed meanwhile; do not restart them until Transit is restored.
+
 ### 5.2 Homelab Recovery Options
 
 1. **Proxmox VM Snapshots / Backups (Recommended for Homelabs)**:
