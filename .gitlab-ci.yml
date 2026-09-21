@@ -26,6 +26,8 @@ terraform:validate:
     entrypoint: [""]
   before_script:
     - cd ${TF_ROOT}
+    # Terraform 1.16 parses TF_VAR_* during init; validate doesn't need the raw key
+    - unset TF_VAR_ssh_public_keys
     - terraform init -backend=false
   script:
     - terraform validate
