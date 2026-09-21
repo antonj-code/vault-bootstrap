@@ -1,0 +1,21 @@
+---
+- name: Restart Vault service
+  ansible.builtin.systemd:
+    name: vault
+    state: restarted
+
+- name: Wait for node to auto-unseal via Transit on the target version
+  ansible.builtin.uri:
+    url: "https://127.0.0.1:{{ vault_api_port }}/v1/sys/health"
+    ca_path: "{{ vault_tls_dir }}/ca.crt"
+    status_code: [200, 429, 472, 473, 501, 503]
+  register: restarted_health
+  retries: 24
+  delay: 5
+  until: >-
+    restarted_health.status | default(0) in [200, 429]
+    and (restarted_health.json.version | default('')) == vault_version
+
+- name: Allow Raft replication to catch up before the next node
+  ansible.builtin.pause:
+    seconds: "{{ vault_rollout_settle_seconds | default(15) }}"

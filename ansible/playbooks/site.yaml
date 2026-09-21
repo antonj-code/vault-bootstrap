@@ -37,7 +37,11 @@
   roles:
     - role: vault_cluster
 
-# Step 5: Post-deployment cluster verification
+# Step 5: Rolling restart onto a new vault_version (no-op when versions already match)
+- name: Rolling restart for Vault version upgrades
+  ansible.builtin.import_playbook: rolling_restart.yaml
+
+# Step 6: Post-deployment cluster verification
 - name: Verify overall cluster health across all instances
   hosts: all
   gather_facts: false

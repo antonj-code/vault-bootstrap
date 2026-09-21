@@ -3,7 +3,7 @@
 > [!IMPORTANT]
 > **Packer is not implemented yet.** Automated image builds with Packer are a planned future project. Nothing in the GitLab pipeline runs Packer today, and the files in `packer/` are untested drafts that have not been used to build a template.
 >
-> Right now, the base golden image (Template ID 1000) is built and maintained by hand on Proxmox using the [Template Setup Guide](template-setup.md). The only part of this guide that exists today is the rolling update playbook described in [Section 4](#4-rolling-update-execution-available-today), and it updates nodes in place rather than rebuilding them from a new image.
+> Right now, the base golden image (Template ID 1000) is built and maintained by hand on Proxmox using the [Template Setup Guide](template-setup.md). The only parts of this guide that exist today are GitOps version upgrades ([Section 4](#4-upgrading-vault-via-gitops-available-today)) and the manual rolling update playbook ([Section 5](#5-manual-rolling-update-execution-available-today)). Both update nodes in place rather than rebuilding them from a new image.
 
 This guide lays out the planned architecture and procedures for rebuilding the 3-Node HashiCorp Vault Cluster and Transit VM using **Packer** and **Method A (Zero-Downtime Rolling Raft Peer Sync)**.
 
@@ -62,7 +62,24 @@ packer build -var-file=pkrvars.hcl almalinux9-cis.pkr.hcl
 
 ---
 
-## 4. Rolling Update Execution (Available Today)
+## 4. Upgrading Vault via GitOps (Available Today)
+
+Vault version upgrades need no manual steps. Change `vault_version` in `ansible/inventory/group_vars/all.yaml` (keep `roles/vault_common/defaults/main.yaml` and `packer/variables.pkr.hcl` in sync), commit, and push to `main`. The `ansible:configure` job then:
+
+1. **Installs the new binary** on every node whose installed version differs, verified against HashiCorp's `SHA256SUMS`. The binary is swapped atomically, so running nodes keep serving on the old version.
+2. **Restarts nodes one at a time** (`playbooks/rolling_restart.yaml`, imported by `site.yaml`), only where the running version differs:
+   * `vm-vault-transit` first, re-unsealed via `vault-transit-unseal.service`. The cluster stays unsealed meanwhile.
+   * Then each standby, then the active leader last, so leadership moves to an already-upgraded node.
+   * Each node must come back unsealed on the new version before the next one starts; any failure stops the rollout.
+3. **Refuses to start** if any cluster node is sealed or unhealthy before the rollout.
+
+When versions already match (including a fresh bootstrap), the restart step does nothing. Downgrades work the same way, but check HashiCorp's upgrade notes first: not every version jump is reversible.
+
+Take a Raft snapshot before pushing a version change (see `docs/security-operations.md`).
+
+---
+
+## 5. Manual Rolling Update Execution (Available Today)
 
 The `rolling_update.yaml` playbook exists and can be run now. It does **not** rebuild VMs from a new template. Instead, it re-applies the `vault_common`, `vault_pki`, and `vault_cluster` roles to each node in `vault_cluster` in place and restarts Vault, one node at a time. It does not touch `vm-vault-transit`.
 

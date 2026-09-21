@@ -169,7 +169,7 @@ Push a commit to `main` (or click **Run pipeline** in GitLab). The pipeline runs
 1. **`validate`**: Syntax & lint checks (`terraform validate`, `ansible-playbook --syntax-check`).
 2. **`plan`**: Builds and inspects the Terraform execution plan with remote state locks.
 3. **`apply`**: Provisions VMs on `colossus` and `guardian` and assigns them to `backup_pool`.
-4. **`configure`**: Distributes mTLS certs, initializes Transit, auto-unseals, and joins Raft nodes.
+4. **`configure`**: Distributes mTLS certs, initializes Transit, auto-unseals, and joins Raft nodes. When `vault_version` changes, it upgrades the binary and restarts nodes one at a time ([details](docs/packer-repaving.md#4-upgrading-vault-via-gitops-available-today)).
 5. **`verify`**: Runs automated cluster health checks against `/v1/sys/health`.
 
 ---

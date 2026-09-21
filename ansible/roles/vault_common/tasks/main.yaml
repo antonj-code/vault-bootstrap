@@ -114,28 +114,60 @@
     path: "/usr/local/bin/vault"
   register: vault_bin_stat
 
+- name: Read installed Vault binary version
+  ansible.builtin.command:
+    cmd: "{{ vault_bin }} version"
+  register: vault_installed_version_raw
+  changed_when: false
+  when: vault_bin_stat.stat.exists
+
+- name: Set installed Vault version fact
+  ansible.builtin.set_fact:
+    vault_installed_version: >-
+      {{ vault_installed_version_raw.stdout | default('')
+         | regex_search('v([0-9]+\.[0-9]+\.[0-9]+)', '\1') | default([''], true) | first }}
+
+# Installs on fresh nodes and upgrades/downgrades when vault_version changes.
+# The running process keeps the old binary until the rolling restart in site.yaml.
 - name: Download and install HashiCorp Vault binary
-  when: not vault_bin_stat.stat.exists
+  when: vault_installed_version != vault_version
   block:
-    - name: Download Vault zip archive
+    - name: Download Vault zip archive (verified against HashiCorp SHA256SUMS)
       ansible.builtin.get_url:
         url: "https://releases.hashicorp.com/vault/{{ vault_version }}/vault_{{ vault_version }}_linux_amd64.zip"
         dest: "/tmp/vault_{{ vault_version }}_linux_amd64.zip"
+        checksum: "sha256:https://releases.hashicorp.com/vault/{{ vault_version }}/vault_{{ vault_version }}_SHA256SUMS"
         mode: '0644'
+
+    - name: Create temporary extraction directory
+      ansible.builtin.file:
+        path: "/tmp/vault_{{ vault_version }}"
+        state: directory
+        mode: '0755'
 
     - name: Extract Vault binary
       ansible.builtin.unarchive:
         src: "/tmp/vault_{{ vault_version }}_linux_amd64.zip"
-        dest: "/usr/local/bin"
+        dest: "/tmp/vault_{{ vault_version }}"
+        remote_src: true
+
+    # copy replaces the file atomically, so it is safe while the old binary is running
+    - name: Install Vault binary
+      ansible.builtin.copy:
+        src: "/tmp/vault_{{ vault_version }}/vault"
+        dest: "{{ vault_bin }}"
         remote_src: true
         owner: "root"
         group: "root"
         mode: '0755'
 
-    - name: Remove temporary zip archive
+    - name: Remove temporary download files
       ansible.builtin.file:
-        path: "/tmp/vault_{{ vault_version }}_linux_amd64.zip"
+        path: "{{ item }}"
         state: absent
+      loop:
+        - "/tmp/vault_{{ vault_version }}_linux_amd64.zip"
+        - "/tmp/vault_{{ vault_version }}"
 
 - name: Ensure symlink exists in /usr/bin/vault for standard PATH resolution
   ansible.builtin.file:

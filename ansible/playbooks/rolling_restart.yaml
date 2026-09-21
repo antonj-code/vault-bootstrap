@@ -1,0 +1,94 @@
+---
+# ==============================================================================
+# Version-Driven Rolling Restart (GitOps upgrades)
+# Restarts only nodes whose running Vault version differs from vault_version,
+# one at a time: Transit first, then cluster standbys, then the active leader.
+# No-op when every node already runs vault_version (e.g. fresh bootstrap).
+# ==============================================================================
+
+- name: Upgrade-restart Transit Auto-Unseal Vault
+  hosts: vault_transit
+  gather_facts: false
+  any_errors_fatal: true
+  tasks:
+    - name: Read running Transit Vault version
+      ansible.builtin.uri:
+        url: "https://127.0.0.1:{{ vault_api_port }}/v1/sys/health"
+        ca_path: "{{ vault_tls_dir }}/ca.crt"
+        status_code: [200, 429, 472, 473, 501, 503]
+      register: transit_health
+
+    - name: Restart and re-unseal Transit Vault on the new binary
+      when: transit_health.json.version != vault_version
+      block:
+        - name: Restart Transit Vault service
+          ansible.builtin.systemd:
+            name: vault
+            state: restarted
+
+        - name: Re-run Transit auto-unseal service
+          ansible.builtin.systemd:
+            name: vault-transit-unseal
+            state: restarted
+
+        - name: Wait for Transit Vault to be unsealed on the target version
+          ansible.builtin.uri:
+            url: "https://127.0.0.1:{{ vault_api_port }}/v1/sys/health"
+            ca_path: "{{ vault_tls_dir }}/ca.crt"
+            status_code: [200, 429, 472, 473, 501, 503]
+          register: transit_health_after
+          retries: 24
+          delay: 5
+          until: >-
+            transit_health_after.status | default(0) == 200
+            and (transit_health_after.json.version | default('')) == vault_version
+
+- name: Classify cluster nodes for rolling restart
+  hosts: vault_cluster
+  gather_facts: false
+  any_errors_fatal: true
+  tasks:
+    - name: Read running cluster node health
+      ansible.builtin.uri:
+        url: "https://127.0.0.1:{{ vault_api_port }}/v1/sys/health"
+        ca_path: "{{ vault_tls_dir }}/ca.crt"
+        status_code: [200, 429, 472, 473, 501, 503]
+      register: node_health
+
+    - name: Mark nodes that are running an outdated Vault version
+      ansible.builtin.set_fact:
+        vault_needs_restart: "{{ node_health.json.version != vault_version }}"
+
+    - name: Refuse to start a rollout unless all cluster nodes are unsealed and healthy
+      ansible.builtin.assert:
+        that:
+          - hostvars[item].node_health.status in [200, 429]
+        fail_msg: "{{ item }} is not an unsealed active/standby node (HTTP {{ hostvars[item].node_health.status }}); fix the cluster before upgrading."
+      loop: "{{ ansible_play_hosts }}"
+      run_once: true
+      when: ansible_play_hosts | map('extract', hostvars, 'vault_needs_restart') | select | list | length > 0
+
+    - name: Group nodes by HA role
+      ansible.builtin.group_by:
+        key: "vault_rollout_{{ 'active' if node_health.status == 200 else 'standby' }}"
+
+- name: Rolling restart of standby nodes
+  hosts: vault_rollout_standby
+  gather_facts: false
+  serial: 1
+  any_errors_fatal: true
+  tasks:
+    - name: Restart standby node on the new binary
+      when: vault_needs_restart | bool
+      ansible.builtin.include_tasks: tasks/restart_vault_node.yaml
+
+- name: Restart active leader last
+  hosts: vault_rollout_active
+  gather_facts: false
+  serial: 1
+  any_errors_fatal: true
+  tasks:
+    # Stopping the service seals the node and hands leadership to an upgraded standby.
+    - name: Restart active node on the new binary
+      when: vault_needs_restart | bool
+      ansible.builtin.include_tasks: tasks/restart_vault_node.yaml
