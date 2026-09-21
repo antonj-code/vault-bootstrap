@@ -1,8 +1,5 @@
 # AlmaLinux 9 CIS Level 2 Template Setup Guide (Proxmox Template ID 1000)
 
-> [!NOTE]
-> **Current Baseline vs. Future Automation**: This guide documents the manual creation and configuration of the Golden Template ID 1000 in Proxmox. Fully automating this template build via **HashiCorp Packer** and scheduled GitLab CI/CD pipelines is a planned future project (see [docs/packer-repaving.md](packer-repaving.md)).
-
 This guide documents the exact step-by-step requirements, Proxmox hardware settings, OS installer choices, user accounts, security compliance, and image sanitization procedures for creating the **AlmaLinux 9 CIS Level 2 Golden Template (ID 1000)** on `colossus` and `guardian`.
 
 ---
@@ -14,7 +11,7 @@ When creating the base VM in the Proxmox Web UI before converting it to a templa
 | Hardware Option | Setting | Why It Is Configured This Way |
 |---|---|---|
 | **VM ID** | **`1000`** | Matches `var.template_vm_id` in Terraform. |
-| **Name** | **`almalinux-9-cis2-template`** | Clean, descriptive naming matching the planned Packer automation. |
+| **Name** | **`almalinux-9-cis2-template`** | Clean, descriptive naming. |
 | **BIOS** | **`Default (SeaBIOS)`** | Faster boot, zero EFI disk overhead, simpler cloning across standalone hosts. |
 | **TPM** | **`Disabled / None`** | Not needed for Open-Source Vault (Transit Auto-Unseal handles keys). |
 | **CPU** | **2 Cores**, Type: **`host`** | Direct CPU flag pass-through (enables hardware AES-NI encryption). |

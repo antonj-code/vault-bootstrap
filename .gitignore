@@ -17,12 +17,6 @@ override.tf.json
 .terraformrc
 terraform.rc
 
-# Packer
-packer_cache/
-*.pkrvars.hcl
-!packer/pkrvars.example.hcl
-*.iso
-
 # Ansible
 *.retry
 ansible.log

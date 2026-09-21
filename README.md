@@ -106,13 +106,7 @@ vault-bootstrap/
 │   ├── security-operations.md      # Post-bootstrap secrets, recovery keys & break-glass runbook
 │   ├── gitlab-setup.md             # GitLab CI/CD setup guide on gitbox.jnet.lan
 │   ├── template-setup.md           # AlmaLinux 9 CIS Level 2 Proxmox template (ID 1000) setup guide
-│   └── packer-repaving.md          # Planned Packer build & rolling repave design (Packer not implemented)
-├── packer/                         # DRAFT ONLY: planned image builder, not implemented or used yet
-│   ├── almalinux9-cis.pkr.hcl      # Draft Proxmox ISO Packer template
-│   ├── variables.pkr.hcl           # Draft Packer variable definitions
-│   ├── pkrvars.example.hcl         # Sample build variables
-│   ├── http/ks.cfg                 # Draft CIS Kickstart configuration
-│   └── scripts/                    # Draft hardening and image cleanup provisioners
+│   └── rolling-updates.md          # GitOps Vault upgrades & manual rolling update runbook
 ├── terraform/                      # OpenTofu / Terraform Proxmox IaC
 │   ├── versions.tf                 # bpg/proxmox provider & GitLab HTTP backend
 │   ├── variables.tf                # Dual-host endpoints, node configs, credentials
@@ -169,7 +163,7 @@ Push a commit to `main` (or click **Run pipeline** in GitLab). The pipeline runs
 1. **`validate`**: Syntax & lint checks (`terraform validate`, `ansible-playbook --syntax-check`).
 2. **`plan`**: Builds and inspects the Terraform execution plan with remote state locks.
 3. **`apply`**: Provisions VMs on `colossus` and `guardian` and assigns them to `backup_pool`.
-4. **`configure`**: Distributes mTLS certs, initializes Transit, auto-unseals, and joins Raft nodes. When `vault_version` changes, it upgrades the binary and restarts nodes one at a time ([details](docs/packer-repaving.md#4-upgrading-vault-via-gitops-available-today)).
+4. **`configure`**: Distributes mTLS certs, initializes Transit, auto-unseals, and joins Raft nodes. When `vault_version` changes, it upgrades the binary and restarts nodes one at a time ([details](docs/rolling-updates.md#1-upgrading-vault-via-gitops)).
 5. **`verify`**: Runs automated cluster health checks against `/v1/sys/health`.
 
 ---
@@ -190,7 +184,6 @@ The `scripts/` directory has a couple of helpers for cluster maintenance:
 
 ## Roadmap & Future Projects
 
-* **Packer Golden Image CI/CD Pipeline**: Automate the AlmaLinux 9 CIS Level 2 template build (ID 1000) itself, so `colossus` and `guardian` stay in sync automatically via a scheduled GitLab CI/CD job. *(Not implemented yet. Template 1000 is currently built by hand, and the files in `packer/` are untested drafts that the pipeline does not use.)*
 * **L4 Load Balancer Integration**: Put a Layer 4 load balancer (HAProxy / VIP at `https://vault.jnet.lan:8200`) in front of the 3-node cluster, so clients don't need to know which node is currently active.
 * **OIDC & AppRole Provisioning**: Add Terraform-managed OIDC and AppRole setup for application secrets and human authentication.
 
@@ -203,4 +196,4 @@ The `scripts/` directory has a couple of helpers for cluster maintenance:
 * **[Post-Bootstrap Security & Operations Guide](docs/security-operations.md)**: Recovery keys, artifact security, root token revocation, workstation TLS CA setup, and break-glass procedures.
 * **[GitLab CI/CD Setup Guide](docs/gitlab-setup.md)**: Runner installation, CI/CD variables, and pipeline configuration.
 * **[Proxmox VM Template Guide](docs/template-setup.md)**: Manual AlmaLinux 9 CIS Level 2 Golden Image creation (the current process).
-* **[Zero-Downtime Repaving Guide](docs/packer-repaving.md)**: Rolling in-place updates today, plus the planned (not yet implemented) Packer-based repave design.
+* **[Rolling Updates Guide](docs/rolling-updates.md)**: GitOps Vault version upgrades and the manual zero-downtime rolling update.
