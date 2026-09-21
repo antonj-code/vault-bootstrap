@@ -8,11 +8,11 @@ terraform {
     }
     local = {
       source  = "hashicorp/local"
-      version = "= 2.5.2"
+      version = "= 2.9.1"
     }
     tls = {
       source  = "hashicorp/tls"
-      version = "= 4.0.6"
+      version = "= 4.4.1"
     }
   }
 

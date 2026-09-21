@@ -1,5 +1,5 @@
 ---
-vault_version: "1.18.3"
+vault_version: "1.18.5"
 vault_bin: "/usr/local/bin/vault"
 vault_user: "vault"
 vault_group: "vault"

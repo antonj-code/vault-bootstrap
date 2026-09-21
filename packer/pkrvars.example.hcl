@@ -11,4 +11,4 @@ network_bridge = "vmbr0"
 
 ssh_username = "almalinux"
 ssh_password = "PackerBuildTempPasswordChangeMe!"
-vault_version = "1.18.3"
+vault_version = "1.18.5"

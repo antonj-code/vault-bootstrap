@@ -66,5 +66,5 @@ variable "ssh_password" {
 variable "vault_version" {
   type        = string
   description = "HashiCorp Vault binary version to bake into the image"
-  default     = "1.18.3"
+  default     = "1.18.5"
 }
