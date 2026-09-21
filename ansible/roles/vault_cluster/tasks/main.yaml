@@ -43,8 +43,51 @@
       delay: 2
       until: primary_init_check.status == 200
 
+    # A rebuilt primary reports initialized=false until retry_join completes.
+    # Never init while another node belongs to a cluster, or that would split-brain
+    # into a new empty cluster and overwrite cluster_credentials.json.
+    - name: Check initialization status of the other cluster nodes
+      ansible.builtin.uri:
+        url: "https://{{ hostvars[item].ansible_host }}:{{ vault_api_port }}/v1/sys/init"
+        ca_path: "{{ vault_tls_dir }}/ca.crt"
+        method: GET
+        status_code: [200]
+        timeout: 5
+      loop: "{{ groups['vault_cluster'] | difference([inventory_hostname]) }}"
+      register: vault_cluster_peer_init
+      failed_when: false
+
+    - name: Decide whether the cluster needs initialization
+      ansible.builtin.set_fact:
+        vault_cluster_existing: "{{ vault_cluster_peer_init.results | selectattr('json', 'defined') | selectattr('json.initialized') | list | length > 0 }}"
+        vault_cluster_unreachable_peers: "{{ vault_cluster_peer_init.results | rejectattr('json', 'defined') | map(attribute='item') | list }}"
+
+    - name: Wait for rebuilt primary node to join the existing cluster
+      when: not primary_init_check.json.initialized and vault_cluster_existing
+      ansible.builtin.uri:
+        url: "https://127.0.0.1:{{ vault_api_port }}/v1/sys/init"
+        ca_path: "{{ vault_tls_dir }}/ca.crt"
+        method: GET
+        status_code: [200]
+      register: vault_cluster_primary_join
+      retries: 30
+      delay: 5
+      until: vault_cluster_primary_join.json.initialized | default(false)
+
+    - name: Set cluster initialization decision
+      ansible.builtin.set_fact:
+        vault_cluster_needs_init: "{{ not primary_init_check.json.initialized and not vault_cluster_existing }}"
+
+    - name: Refuse to initialize while other cluster nodes are unreachable
+      when: vault_cluster_needs_init | bool
+      ansible.builtin.assert:
+        that: vault_cluster_unreachable_peers | length == 0
+        fail_msg: >-
+          Refusing to run operator init: {{ vault_cluster_unreachable_peers | join(', ') }} unreachable,
+          so an existing cluster cannot be ruled out.
+
     - name: Initialize Main Vault cluster
-      when: not primary_init_check.json.initialized
+      when: vault_cluster_needs_init | bool
       ansible.builtin.command:
         cmd: "{{ vault_bin }} operator init -recovery-shares={{ vault_recovery_shares }} -recovery-threshold={{ vault_recovery_threshold }} -format=json"
       environment:
@@ -53,7 +96,7 @@
       register: cluster_init_raw
 
     - name: Save Cluster recovery keys and initial root token to control node
-      when: not primary_init_check.json.initialized
+      when: vault_cluster_needs_init | bool
       ansible.builtin.copy:
         content: "{{ cluster_init_raw.stdout }}"
         dest: "{{ vault_local_credentials_dir }}/cluster_credentials.json"
